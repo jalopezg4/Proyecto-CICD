@@ -1,0 +1,13 @@
+[run]
+source = .
+branch = True
+omit =
+    tests/*
+    main.py
+    api_client.py
+
+[report]
+show_missing = True
+
+[html]
+directory = htmlcov

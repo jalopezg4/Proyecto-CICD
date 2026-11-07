@@ -1,0 +1,17 @@
+{
+  "name": "gastico-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pruebas de aceptación E2E de Gastico con Playwright + TypeScript (BDD: Dado/Cuando/Entonces)",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
