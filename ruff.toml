@@ -1,0 +1,17 @@
+target-version = "py313"
+line-length = 120
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+ignore = [
+  "E501",
+  "B008",  # FastAPI usa Depends() como valor por defecto a propósito
+  "UP042", # StrEnum cambiaría el comportamiento en tiempo de ejecución
+]
+
+[lint.isort]
+known-first-party = ["app"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

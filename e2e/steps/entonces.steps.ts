@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
-import { Gasto } from '../data/gastos.data';
-import { GastosPage } from '../pages/gastos.page';
+import { expect, test } from "@playwright/test";
+import { Gasto } from "../data/gastos.data";
+import { GastosPage } from "../pages/gastos.page";
 
 /**
  * ENTONCES (Then) = Assert: lo que el usuario debe ver.

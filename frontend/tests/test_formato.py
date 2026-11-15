@@ -1,15 +1,18 @@
 """Pruebas unitarias del formato de pesos colombianos del frontend (AAA)."""
-import pytest
 
+import pytest
 from formato import MONTO_MAXIMO, formatear_cop, normalizar_monto, parsear_cop, solo_digitos
 
 
-@pytest.mark.parametrize("entrada, esperado", [
-    ("18.000", "18000"),
-    ("-+e18000.5", "180005"),
-    ("abc", ""),
-    (None, ""),
-])
+@pytest.mark.parametrize(
+    "entrada, esperado",
+    [
+        ("18.000", "18000"),
+        ("-+e18000.5", "180005"),
+        ("abc", ""),
+        (None, ""),
+    ],
+)
 def test_solo_digitos_descarta_simbolos(entrada, esperado):
     # Act
     resultado = solo_digitos(entrada)
@@ -34,13 +37,16 @@ def test_parsear_cop_sin_numeros_devuelve_none():
     assert parsear_cop("") is None
 
 
-@pytest.mark.parametrize("valor, esperado", [
-    (0, "0"),
-    (999, "999"),
-    (18000, "18.000"),
-    (100_000_000, "100.000.000"),
-    (None, ""),
-])
+@pytest.mark.parametrize(
+    "valor, esperado",
+    [
+        (0, "0"),
+        (999, "999"),
+        (18000, "18.000"),
+        (100_000_000, "100.000.000"),
+        (None, ""),
+    ],
+)
 def test_formatear_cop_pone_puntos_de_miles(valor, esperado):
     # Act
     resultado = formatear_cop(valor)

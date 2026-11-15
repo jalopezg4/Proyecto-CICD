@@ -34,7 +34,7 @@ def eliminar_gasto(gasto_id: int, service: GastoService = Depends(get_service)):
     try:
         return service.eliminar_gasto(gasto_id)
     except GastoNoEncontrado as error:
-        raise HTTPException(status_code=404, detail=str(error))
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/gastos/resumen", response_model=Resumen)

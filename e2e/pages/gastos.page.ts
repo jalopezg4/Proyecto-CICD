@@ -1,7 +1,7 @@
-import { expect, Locator, Page } from '@playwright/test';
-import { Categoria } from '../data/gastos.data';
-import { GastosLocators } from '../locators/gastos.locators';
-import { BasePage } from './base.page';
+import { expect, Locator, Page } from "@playwright/test";
+import { Categoria } from "../data/gastos.data";
+import { GastosLocators } from "../locators/gastos.locators";
+import { BasePage } from "./base.page";
 
 /**
  * PAGE: los MÉTODOS de la pantalla (cómo interactuar con ella).
@@ -11,14 +11,14 @@ export class GastosPage extends BasePage {
   private readonly locators: GastosLocators;
 
   constructor(page: Page) {
-    super(page, '/');
+    super(page, "/");
     this.locators = new GastosLocators(page);
   }
 
   // ---------- Acciones ----------
   async abrir(): Promise<void> {
     await this.navegar();
-    await this.locators.inputMonto.waitFor({ state: 'visible' });
+    await this.locators.inputMonto.waitFor({ state: "visible" });
   }
 
   async escribirMonto(monto: string): Promise<void> {
@@ -38,7 +38,11 @@ export class GastosPage extends BasePage {
     await this.locators.botonAgregar.click();
   }
 
-  async completarFormulario(monto: string, descripcion: string, categoria: Categoria): Promise<void> {
+  async completarFormulario(
+    monto: string,
+    descripcion: string,
+    categoria: Categoria,
+  ): Promise<void> {
     await this.escribirMonto(monto);
     await this.escribirDescripcion(descripcion);
     await this.elegirCategoria(categoria);
@@ -53,7 +57,7 @@ export class GastosPage extends BasePage {
   /** Sincronización (no es una aserción del escenario): el formulario se limpia
    *  cuando el backend confirmó el registro. */
   async esperarFormularioLimpio(): Promise<void> {
-    await expect(this.locators.inputDescripcion).toHaveValue('');
+    await expect(this.locators.inputDescripcion).toHaveValue("");
   }
 
   async eliminarGasto(descripcion: string): Promise<void> {
@@ -65,9 +69,19 @@ export class GastosPage extends BasePage {
   }
 
   // ---------- Elementos que los steps "Entonces" necesitan verificar ----------
-  campoMonto(): Locator { return this.locators.inputMonto; }
-  campoDescripcion(): Locator { return this.locators.inputDescripcion; }
-  botonAgregar(): Locator { return this.locators.botonAgregar; }
-  gastoEnLista(descripcion: string): Locator { return this.locators.itemPorDescripcion(descripcion); }
-  barraDeshacer(): Locator { return this.locators.barraDeshacer; }
+  campoMonto(): Locator {
+    return this.locators.inputMonto;
+  }
+  campoDescripcion(): Locator {
+    return this.locators.inputDescripcion;
+  }
+  botonAgregar(): Locator {
+    return this.locators.botonAgregar;
+  }
+  gastoEnLista(descripcion: string): Locator {
+    return this.locators.itemPorDescripcion(descripcion);
+  }
+  barraDeshacer(): Locator {
+    return this.locators.barraDeshacer;
+  }
 }

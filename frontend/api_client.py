@@ -1,4 +1,5 @@
 """Cliente HTTP del frontend: la única pieza que habla con el backend."""
+
 import httpx
 
 

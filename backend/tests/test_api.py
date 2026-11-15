@@ -2,6 +2,7 @@
 
 Cada prueba usa un servicio nuevo gracias al fixture `client` (ver conftest.py).
 """
+
 import pytest
 
 from app.main import get_service
@@ -31,6 +32,7 @@ def test_health_responde_ok(client):
 
 # ---------- POST /gastos ----------
 
+
 def test_post_gastos_crea_el_gasto(client, service):
     # Arrange
     datos = GASTO_VALIDO
@@ -57,15 +59,18 @@ def test_post_gastos_quita_espacios_de_la_descripcion(client):
     assert respuesta.json()["descripcion"] == "Bus"
 
 
-@pytest.mark.parametrize("cambio", [
-    {"monto": 0},                   # monto debe ser > 0
-    {"monto": -5000},               # sin negativos
-    {"monto": 100_000_001},         # tope de cien millones
-    {"monto": 1500.5},              # COP no usa decimales
-    {"descripcion": ""},            # vacía
-    {"descripcion": "    "},        # solo espacios
-    {"categoria": "Viajes"},        # categoría que no existe
-])
+@pytest.mark.parametrize(
+    "cambio",
+    [
+        {"monto": 0},  # monto debe ser > 0
+        {"monto": -5000},  # sin negativos
+        {"monto": 100_000_001},  # tope de cien millones
+        {"monto": 1500.5},  # COP no usa decimales
+        {"descripcion": ""},  # vacía
+        {"descripcion": "    "},  # solo espacios
+        {"categoria": "Viajes"},  # categoría que no existe
+    ],
+)
 def test_post_gastos_rechaza_datos_invalidos(client, service, cambio):
     # Arrange
     datos = {**GASTO_VALIDO, **cambio}
@@ -90,6 +95,7 @@ def test_post_gastos_acepta_el_monto_maximo(client):
 
 
 # ---------- GET /gastos ----------
+
 
 def test_get_gastos_lista_los_gastos(client):
     # Arrange
@@ -118,6 +124,7 @@ def test_get_gastos_filtra_por_categoria(client):
 
 # ---------- DELETE /gastos/{id} ----------
 
+
 def test_delete_gastos_elimina_el_gasto(client, service):
     # Arrange
     gasto_id = client.post("/gastos", json=GASTO_VALIDO).json()["id"]
@@ -140,6 +147,7 @@ def test_delete_gastos_inexistente_responde_404(client):
 
 # ---------- GET /gastos/resumen ----------
 
+
 def test_get_resumen_calcula_totales(client):
     # Arrange
     client.post("/gastos", json={**GASTO_VALIDO, "monto": 20000})
@@ -150,5 +158,4 @@ def test_get_resumen_calcula_totales(client):
 
     # Assert
     assert respuesta.status_code == 200
-    assert respuesta.json() == {"total": 25000, "cantidad": 2,
-                                "por_categoria": {"Comida": 20000, "Ocio": 5000}}
+    assert respuesta.json() == {"total": 25000, "cantidad": 2, "por_categoria": {"Comida": 20000, "Ocio": 5000}}

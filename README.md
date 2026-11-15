@@ -74,3 +74,19 @@ npm test
 Otras opciones: `npm run test:headed` (ver el navegador), `npm run test:ui` (modo paso a paso)
 y `npm run report` (reporte HTML con los pasos Dado/Cuando/Entonces).
 Detalle: [docs/punto3-prueba-de-aceptacion-e2e.md](docs/punto3-prueba-de-aceptacion-e2e.md)
+
+## Pre-commit
+
+Antes de hacer el primer commit, instalar los hooks (una sola vez):
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Desde ahí, cada `git commit` corre automáticamente ruff (Python) y eslint/prettier (`e2e/`),
+además de gitleaks y validaciones básicas de formato. Para correrlo manualmente sobre todo el repo:
+
+```bash
+pre-commit run --all-files
+```

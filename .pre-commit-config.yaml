@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.5
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+        files: ^(backend|frontend)/.*\.py$
+      - id: ruff-format
+        files: ^(backend|frontend)/.*\.py$
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (e2e)
+        entry: npm --prefix e2e run lint
+        language: system
+        files: ^e2e/.*\.ts$
+        pass_filenames: false
+      - id: prettier
+        name: prettier (e2e)
+        entry: npm --prefix e2e run format
+        language: system
+        files: ^e2e/.*\.ts$
+        pass_filenames: false
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
