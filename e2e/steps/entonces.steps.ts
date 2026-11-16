@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { Gasto } from "../data/gastos.data";
+import { enPesos, Gasto, ResumenAnotado } from "../data/gastos.data";
 import { GastosPage } from "../pages/gastos.page";
 
 /**
@@ -40,6 +40,26 @@ export class Entonces {
   async elBotonAgregarEstaHabilitado(): Promise<void> {
     await test.step('Entonces el botón "Agregar gasto" está habilitado', async () => {
       await expect(this.gastosPage.botonAgregar()).toBeEnabled();
+    });
+  }
+
+  async elResumenSumaElGasto(antes: ResumenAnotado, gasto: Gasto): Promise<void> {
+    await test.step(`Entonces el total sube ${gasto.montoEnPantalla} y la cantidad sube en 1`, async () => {
+      await expect(this.gastosPage.total()).toHaveText(enPesos(antes.total + Number(gasto.monto)));
+      await expect(this.gastosPage.cantidad()).toContainText(`${antes.cantidad + 1} gasto(s)`);
+    });
+  }
+
+  async veElAviso(texto: string): Promise<void> {
+    await test.step(`Entonces aparece el aviso "${texto}"`, async () => {
+      await expect(this.gastosPage.notificacion(texto)).toBeVisible();
+    });
+  }
+
+  async elFormularioQuedaLimpio(): Promise<void> {
+    await test.step("Entonces el formulario queda limpio", async () => {
+      await expect(this.gastosPage.campoMonto()).toHaveValue("");
+      await expect(this.gastosPage.campoDescripcion()).toHaveValue("");
     });
   }
 

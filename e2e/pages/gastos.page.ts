@@ -1,5 +1,5 @@
 import { expect, Locator, Page } from "@playwright/test";
-import { Categoria } from "../data/gastos.data";
+import { Categoria, ResumenAnotado } from "../data/gastos.data";
 import { GastosLocators } from "../locators/gastos.locators";
 import { BasePage } from "./base.page";
 
@@ -68,6 +68,27 @@ export class GastosPage extends BasePage {
     await this.locators.botonDeshacer.click();
   }
 
+  async presionarEnterEnDescripcion(): Promise<void> {
+    await this.locators.inputDescripcion.press("Enter");
+  }
+
+  async filtrarPor(categoria: Categoria): Promise<void> {
+    await this.locators.chipFiltro(categoria).click();
+  }
+
+  async recargar(): Promise<void> {
+    await this.page.reload();
+    await this.locators.inputMonto.waitFor({ state: "visible" });
+  }
+
+  /** Lee el total ("$ 25.000") y la cantidad ("2 gasto(s) · promedio ...") como números. */
+  async leerResumen(): Promise<ResumenAnotado> {
+    const soloNumero = (texto: string) => Number(texto.replace(/\D/g, ""));
+    const total = await this.locators.total.innerText();
+    const cantidad = await this.locators.cantidad.innerText();
+    return { total: soloNumero(total), cantidad: soloNumero(cantidad.split("gasto")[0]) };
+  }
+
   // ---------- Elementos que los steps "Entonces" necesitan verificar ----------
   campoMonto(): Locator {
     return this.locators.inputMonto;
@@ -83,5 +104,14 @@ export class GastosPage extends BasePage {
   }
   barraDeshacer(): Locator {
     return this.locators.barraDeshacer;
+  }
+  total(): Locator {
+    return this.locators.total;
+  }
+  cantidad(): Locator {
+    return this.locators.cantidad;
+  }
+  notificacion(texto: string): Locator {
+    return this.locators.notificacion(texto);
   }
 }

@@ -78,7 +78,7 @@ Esto no se puede probar en el computador: depende de la red de AWS.
 - [ ] Abrir la app en dos pestañas y registrar un gasto en cada una: ambas funcionan sin errores (sticky sessions)
 - [ ] Cambiar de categoría, filtrar y eliminar varias veces seguidas no deja la pantalla trabada
 - [ ] No hay mensajes de error rojos inesperados (mirar también la consola del navegador, F12)
-- [ ] Con el backend en 0 tareas, `/health` del frontend responde 503 con `{"status": "degraded", "backend": "down"}`; al volverlo a 1 tarea responde 200 "ok" (8.3, una sola vez)
+- [ ] Con el backend en 0 tareas, `/health` del frontend responde 503 con `"status": "degraded"` y `"backend": "down"`; al volverlo a 1 tarea responde 200 "ok" (8.3, una sola vez)
 
 ## D. Cosas que hay que mirar en la consola de AWS y en GitHub
 

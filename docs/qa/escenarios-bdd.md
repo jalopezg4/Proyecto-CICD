@@ -202,8 +202,8 @@ Este es el contrato que el paso 5 implementa y que el smoke verifica:
 
 | Situación | Código HTTP | Respuesta de `/health` del frontend |
 |---|---|---|
-| Todo bien | 200 | `{"status": "ok", "version": "<versión>"}` |
-| El backend no responde | 503 | `{"status": "degraded", "backend": "down"}` |
+| Todo bien | 200 | `{"status": "ok", "version": "<versión>", "backend": "ok"}` |
+| El backend no responde | 503 | `{"status": "degraded", "version": "<versión>", "backend": "down"}` |
 
 La `<versión>` es el mismo tag de la imagen en ECR y depende del ambiente:
 
@@ -237,7 +237,7 @@ La `<versión>` es el mismo tag de la imagen en ECR y depende del ambiente:
 - **Dado** que el frontend está arriba pero el servicio del backend está en 0 tareas
 - **Cuando** se consulta `/health` del frontend
 - **Entonces** responde con código **503**
-- **Y** el cuerpo es exactamente `{"status": "degraded", "backend": "down"}`
+- **Y** el cuerpo dice `"status": "degraded"` y `"backend": "down"`
 - **Cuando** el servicio del backend vuelve a 1 tarea
 - **Entonces** `/health` vuelve a responder 200 con estado "ok"
 

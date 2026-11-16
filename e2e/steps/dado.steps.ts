@@ -1,5 +1,5 @@
 import { test } from "@playwright/test";
-import { Gasto } from "../data/gastos.data";
+import { Gasto, ResumenAnotado } from "../data/gastos.data";
 import { GastosPage } from "../pages/gastos.page";
 
 /**
@@ -18,6 +18,12 @@ export class Dado {
   async queYaRegistroElGasto(gasto: Gasto): Promise<void> {
     await test.step(`Dado que ya registró el gasto "${gasto.descripcion}"`, async () => {
       await this.gastosPage.registrarGasto(gasto.monto, gasto.descripcion, gasto.categoria);
+    });
+  }
+
+  async queAnotaElResumen(): Promise<ResumenAnotado> {
+    return await test.step("Dado que anota el total y la cantidad que muestra el resumen", async () => {
+      return await this.gastosPage.leerResumen();
     });
   }
 }

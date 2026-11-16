@@ -6,7 +6,7 @@ Control de gastos personales. Backend y frontend separados, ambos en Python.
 |---|---|---|
 | `backend/` | FastAPI (API REST) | 8000 |
 | `frontend/` | NiceGUI (UI en Python) | 8080 |
-| `e2e/` | Playwright + TypeScript (Locators → Pages → Steps BDD → Specs) | 8001 / 8081 (propios) |
+| `e2e/` | Playwright + TypeScript (Locators → Pages → Steps BDD → Specs) | 8101 / 8181 (propios) |
 
 ## Endpoints
 
@@ -66,7 +66,7 @@ npm install
 npx playwright install chromium
 ```
 
-Las pruebas levantan solas el backend y el frontend en los puertos 8001/8081:
+Las pruebas levantan solas el backend y el frontend en los puertos 8101/8181:
 ```bash
 npm test
 ```
@@ -74,6 +74,38 @@ npm test
 Otras opciones: `npm run test:headed` (ver el navegador), `npm run test:ui` (modo paso a paso)
 y `npm run report` (reporte HTML con los pasos Dado/Cuando/Entonces).
 Detalle: [docs/punto3-prueba-de-aceptacion-e2e.md](docs/punto3-prueba-de-aceptacion-e2e.md)
+
+Contra una app que ya está arriba (docker compose o el ALB de staging), sin levantar nada:
+```bash
+E2E_BASE_URL=http://127.0.0.1:8080 npm test
+```
+
+Hay 10 escenarios: los 4 originales y los 6 marcados `automatizar` en
+[docs/qa/escenarios-bdd.md](docs/qa/escenarios-bdd.md) (1.1, 2.1, 3.1, 3.3, 3.4 y 7.1).
+El 1.1 compara el total antes y después, así que corre al final y solo (proyecto `resumen`).
+
+## Smoke (staging y producción, solo lectura)
+
+Escenarios 8.1 y 8.2: `/health` responde "ok" con la versión desplegada y la página principal
+carga. Solo hacen GET, así que se pueden correr en producción.
+
+```bash
+pip install pytest
+SMOKE_BASE_URL=http://127.0.0.1:8080 SMOKE_VERSION=dev python -m pytest smoke -v
+```
+
+`SMOKE_VERSION` es la versión que se acaba de desplegar: `sha-xxxxxxx` en staging y `vX.Y.Z` en producción.
+
+## Prueba de carga (k6, solo staging)
+
+10 usuarios durante 1 minuto pidiendo la página principal y `/health`. Falla si el p95 pasa de
+500 ms o si los errores pasan del 1 %. No escribe datos.
+
+```bash
+k6 run -e BASE_URL=http://127.0.0.1:8080 k6/carga.js
+# sin instalar k6, con Docker (contra compose):
+docker run --rm -v "$PWD/k6:/scripts:ro" grafana/k6:1.4.2 run -e BASE_URL=http://host.docker.internal:8080 /scripts/carga.js
+```
 
 ## Pre-commit
 
