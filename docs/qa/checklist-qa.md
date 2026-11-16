@@ -30,9 +30,11 @@ Los escenarios a los que se refiere cada punto están en [escenarios-bdd.md](esc
 ## A. Antes de empezar
 
 - [ ] El run del pipeline terminó en verde (CI, release y deploy)
-- [ ] La URL de la app abre sin errores de certificado ni de red
-- [ ] `/health` responde "ok"
-- [ ] La versión que informa `/health` es la que se quería desplegar
+- [ ] La URL de la app abre sin errores de red
+  - El ALB es solo HTTP (no hay dominio ni certificado en el Learner Lab). Que el navegador muestre
+    **"No es seguro"** es lo esperado: **no es un defecto** y no es motivo para rechazar la QA.
+- [ ] `/health` responde 200 con estado "ok"
+- [ ] La versión que informa `/health` es la que se quería desplegar: `sha-xxxxxxx` en staging, `vX.Y.Z` (con la `v`) en producción (8.1)
 - [ ] Se anotó si el ambiente está recién desplegado (si es así, debe estar sin gastos; ver 6.1)
 
 ## B. Funcionalidad (staging)
@@ -76,6 +78,7 @@ Esto no se puede probar en el computador: depende de la red de AWS.
 - [ ] Abrir la app en dos pestañas y registrar un gasto en cada una: ambas funcionan sin errores (sticky sessions)
 - [ ] Cambiar de categoría, filtrar y eliminar varias veces seguidas no deja la pantalla trabada
 - [ ] No hay mensajes de error rojos inesperados (mirar también la consola del navegador, F12)
+- [ ] Con el backend en 0 tareas, `/health` del frontend responde 503 con `{"status": "degraded", "backend": "down"}`; al volverlo a 1 tarea responde 200 "ok" (8.3, una sola vez)
 
 ## D. Cosas que hay que mirar en la consola de AWS y en GitHub
 
@@ -103,7 +106,7 @@ Antes de aprobar el environment `production` en GitHub:
 
 Después del deploy a producción:
 
-- [ ] `/health` responde "ok" con la versión del tag (8.1)
+- [ ] `/health` responde 200 "ok" con la versión exactamente igual al tag, con la `v` (por ejemplo `v1.0.0`) (8.1)
 - [ ] La página principal carga con el título "Gastico" y el formulario (8.2)
 - [ ] El smoke del pipeline terminó en verde
 - [ ] No quedaron gastos de prueba en producción

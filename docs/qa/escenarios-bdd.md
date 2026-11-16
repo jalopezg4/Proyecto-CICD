@@ -198,15 +198,28 @@ Estos 4 escenarios ya existen en `e2e/specs/registro-gastos.spec.ts` y corren en
 ## 8. Funcionalidad: Salud del sistema (smoke, solo lectura)
 
 Dependen de que el paso 5 deje listo `/health` con `status` y `version` en el frontend y en el backend.
+Este es el contrato que el paso 5 implementa y que el smoke verifica:
+
+| Situación | Código HTTP | Respuesta de `/health` del frontend |
+|---|---|---|
+| Todo bien | 200 | `{"status": "ok", "version": "<versión>"}` |
+| El backend no responde | 503 | `{"status": "degraded", "backend": "down"}` |
+
+La `<versión>` es el mismo tag de la imagen en ECR y depende del ambiente:
+
+| Ambiente | Qué versión informa `/health` | Ejemplo |
+|---|---|---|
+| Staging | El commit, porque en staging no hay tag | `sha-1a2b3c4` |
+| Producción | El tag, exactamente igual y **con la `v`** | `v1.0.0` |
 
 ### 8.1 El sistema responde con la versión correcta
 
 **Etiqueta:** `smoke` · **Corre en:** staging y producción
 
-- **Dado** que se acaba de desplegar la versión `vX.Y.Z`
+- **Dado** que se acaba de desplegar una versión: el commit `sha-xxxxxxx` en staging o el tag `vX.Y.Z` en producción
 - **Cuando** se consulta `/health` del frontend
-- **Entonces** responde con estado "ok"
-- **Y** la versión que informa es exactamente `X.Y.Z`
+- **Entonces** responde con código 200 y estado "ok"
+- **Y** la versión que informa es exactamente la desplegada: `sha-xxxxxxx` en staging y `vX.Y.Z` (con la `v`) en producción
 
 ### 8.2 La página principal carga
 
@@ -221,11 +234,18 @@ Dependen de que el paso 5 deje listo `/health` con `status` y `version` en el fr
 
 **Etiqueta:** `manual` · **Corre en:** staging
 
-- **Dado** que el frontend está arriba pero el backend no responde
+- **Dado** que el frontend está arriba pero el servicio del backend está en 0 tareas
 - **Cuando** se consulta `/health` del frontend
-- **Entonces** el estado NO es "ok" y se ve que el problema está en el backend
+- **Entonces** responde con código **503**
+- **Y** el cuerpo es exactamente `{"status": "degraded", "backend": "down"}`
+- **Cuando** el servicio del backend vuelve a 1 tarea
+- **Entonces** `/health` vuelve a responder 200 con estado "ok"
 
-> Es manual porque hay que tumbar el backend a propósito. Se hace una sola vez en staging.
+> Es manual porque hay que tumbar el backend a propósito. Se hace una sola vez y **solo en staging**.
+> Cómo tumbarlo sin romper nada: bajar el servicio del backend de staging a 0 tareas en ECS (desired
+> count = 0), hacer la prueba y después volverlo a 1. No se borra ni se cambia nada más. Mientras el
+> backend está en 0, el ALB puede marcar el frontend como "unhealthy": es lo esperado. Al volver a 1,
+> todo debe recuperarse solo. Los gastos que había se pierden, porque viven en memoria.
 
 ---
 
