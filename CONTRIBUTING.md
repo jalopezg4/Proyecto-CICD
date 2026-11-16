@@ -86,7 +86,7 @@ update stuff                          ← sin tipo y en inglés
    - el **título del PR** sigue la misma convención (`feat(frontend): ...`), porque será el mensaje del commit final;
    - completar la plantilla: qué cambia, por qué y cómo se probó.
 4. Para hacer merge se necesita:
-   - **1 aprobación de alguien del otro squad**: así todo el equipo conoce todo el proyecto;
+   - **1 aprobación de otro integrante del equipo** (GitHub no deja aprobar el PR propio);
    - **CI en verde**, cuando exista el workflow.
 5. El merge se hace con **Squash and merge**: a `main` entra un solo commit con el título del PR.
 6. Borrar la rama después del merge.

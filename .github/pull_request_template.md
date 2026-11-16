@@ -15,5 +15,5 @@
 ## Checklist
 
 - [ ] El título del PR sigue la convención (ver [CONTRIBUTING.md](../CONTRIBUTING.md))
-- [ ] Revisor asignado del otro squad
+- [ ] Revisor asignado
 - [ ] Documentación actualizada si aplica
