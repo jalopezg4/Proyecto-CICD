@@ -21,6 +21,12 @@ class GastosApi:
             self._client = httpx.AsyncClient(base_url=self.base_url, timeout=5)
         return self._client
 
+    async def cerrar(self) -> None:
+        """Cierra el cliente compartido (se llama al apagar la app)."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
     async def _request(self, method: str, path: str, **kwargs):
         try:
             respuesta = await self._cliente().request(method, path, **kwargs)

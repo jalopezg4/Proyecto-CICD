@@ -83,6 +83,7 @@ E2E_BASE_URL=http://127.0.0.1:8080 npm test
 Hay 10 escenarios: los 4 originales y los 6 marcados `automatizar` en
 [docs/qa/escenarios-bdd.md](docs/qa/escenarios-bdd.md) (1.1, 2.1, 3.1, 3.3, 3.4 y 7.1).
 El 1.1 compara el total antes y después, así que corre al final y solo (proyecto `resumen`).
+Si falla otro escenario, el 1.1 aparece como "skipped" en el reporte, no como fallido.
 
 ## Smoke (staging y producción, solo lectura)
 
@@ -98,8 +99,9 @@ SMOKE_BASE_URL=http://127.0.0.1:8080 SMOKE_VERSION=dev python -m pytest smoke -v
 
 ## Prueba de carga (k6, solo staging)
 
-10 usuarios durante 1 minuto pidiendo la página principal y `/health`. Falla si el p95 pasa de
-500 ms o si los errores pasan del 1 %. No escribe datos.
+10 usuarios durante 1 minuto pidiendo la página principal y `/health`. Falla si el p95 de `/health` pasa de
+500 ms, si el de la página principal pasa de 1500 ms (NiceGUI la arma completa en el servidor)
+o si los errores pasan del 1 %. No escribe datos. Los umbrales se calibran con staging en el paso 9.
 
 ```bash
 k6 run -e BASE_URL=http://127.0.0.1:8080 k6/carga.js

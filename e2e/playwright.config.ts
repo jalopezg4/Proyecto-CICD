@@ -35,6 +35,8 @@ export default defineConfig({
     },
     // El escenario 1.1 compara el total antes y después; corre al final y de a uno (incluso con
     // --repeat-each), para que ningún otro gasto registrado en paralelo cambie el total en medio.
+    // Ojo al leer el reporte: si falla cualquier escenario de "chromium", el 1.1 sale como
+    // "skipped" (no se corrió), no como fallido.
     {
       name: "resumen",
       testMatch: /resumen\.spec\.ts/,

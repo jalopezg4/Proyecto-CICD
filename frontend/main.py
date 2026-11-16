@@ -26,6 +26,7 @@ STORAGE_SECRET = os.getenv("GASTICO_STORAGE_SECRET", "dev-secret-cambiar-en-prod
 SEGUNDOS_DESHACER = 6
 
 api = GastosApi(API_URL)
+app.on_shutdown(api.cerrar)  # cierra el cliente HTTP compartido al apagar la app
 
 
 @app.get("/health/live")
