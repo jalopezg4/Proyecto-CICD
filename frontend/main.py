@@ -7,15 +7,15 @@ La UX sigue modelos mentales de apps de finanzas conocidas:
 - Eliminar se puede deshacer (como Gmail), en vez de pedir confirmación.
 - Tocar una categoría del resumen filtra la lista.
 """
+
 import os
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from nicegui import ui
-
 from api_client import ApiError, GastosApi
 from formato import MONTO_MAXIMO, formatear_cop, normalizar_monto, parsear_cop, solo_digitos
+from nicegui import ui
 
 API_URL = os.getenv("GASTICO_API_URL", "http://127.0.0.1:8000")
 PUERTO = int(os.getenv("GASTICO_FRONT_PORT", "8080"))
@@ -40,8 +40,20 @@ SOLO_DIGITOS_JS = """(e) => {
   if (!/^[0-9]$/.test(e.key)) e.preventDefault();
 }"""
 
-MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
-         "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+MESES = [
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+]
 
 ESTILOS = """
 <style>
@@ -99,8 +111,11 @@ async def index():
     estado = {"categoria": "Comida", "filtro": None, "eliminado": None, "expira": 0.0}
 
     # ---------- Encabezado ----------
-    with ui.header().classes("text-slate-800 px-8 py-4 backdrop-blur-md border-b border-slate-200/60") \
-            .style("background: rgba(255,255,255,.75)"):
+    with (
+        ui.header()
+        .classes("text-slate-800 px-8 py-4 backdrop-blur-md border-b border-slate-200/60")
+        .style("background: rgba(255,255,255,.75)")
+    ):
         with ui.row().classes("w-full max-w-6xl mx-auto items-center justify-between"):
             with ui.row().classes("items-center gap-3"):
                 ui.icon("savings", size="38px").classes("text-emerald-600")
@@ -108,8 +123,7 @@ async def index():
                     ui.label("Gastico").classes("text-3xl font-extrabold tracking-tight")
                     ui.label("Tu plata, bajo control").classes("text-sm text-slate-500")
             hoy = date.today()
-            ui.label(f"{saludo()} 👋 · {hoy.day} de {MESES[hoy.month - 1]}") \
-                .classes("text-slate-500 max-sm:hidden")
+            ui.label(f"{saludo()} 👋 · {hoy.day} de {MESES[hoy.month - 1]}").classes("text-slate-500 max-sm:hidden")
 
     # ---------- Acciones ----------
     def valor_monto() -> int | None:
@@ -207,9 +221,13 @@ async def index():
             for nombre, (icono, color) in CATEGORIAS.items():
                 activa = estado["categoria"] == nombre
                 estilo = f"background:{color};border-color:{color};color:white" if activa else ""
-                with ui.element("div").classes("chip").style(estilo) \
-                        .props(f"data-testid=chip-{nombre.lower()}") \
-                        .on("click", lambda n=nombre: elegir_categoria(n)):
+                with (
+                    ui.element("div")
+                    .classes("chip")
+                    .style(estilo)
+                    .props(f"data-testid=chip-{nombre.lower()}")
+                    .on("click", lambda n=nombre: elegir_categoria(n))
+                ):
                     ui.icon(icono, size="18px").style("" if activa else f"color:{color}")
                     ui.label(nombre)
 
@@ -230,15 +248,17 @@ async def index():
     def chips_filtro():
         with ui.row().classes("gap-2 flex-wrap").props("data-testid=filtro-categoria"):
             activo = estado["filtro"] is None
-            with ui.element("div").classes("chip").style(
-                    "background:#0f172a;border-color:#0f172a;color:white" if activo else "") \
-                    .on("click", lambda: filtrar(None)):
+            with (
+                ui.element("div")
+                .classes("chip")
+                .style("background:#0f172a;border-color:#0f172a;color:white" if activo else "")
+                .on("click", lambda: filtrar(None))
+            ):
                 ui.label("Todas")
             for nombre, (icono, color) in CATEGORIAS.items():
                 activo = estado["filtro"] == nombre
                 estilo = f"background:{color};border-color:{color};color:white" if activo else ""
-                with ui.element("div").classes("chip").style(estilo) \
-                        .on("click", lambda n=nombre: filtrar(n)):
+                with ui.element("div").classes("chip").style(estilo).on("click", lambda n=nombre: filtrar(n)):
                     ui.icon(icono, size="16px").style("" if activo else f"color:{color}")
                     ui.label(nombre)
 
@@ -253,30 +273,37 @@ async def index():
         with ui.column().classes("kpi-total w-full p-6 gap-1"):
             ui.label("Total gastado").classes("text-emerald-50 text-sm uppercase tracking-wider")
             ui.label(pesos(datos["total"])).classes("text-4xl font-extrabold").props("data-testid=total")
-            ui.label(f"{datos['cantidad']} gasto(s) · promedio {pesos(promedio)}") \
-                .classes("text-emerald-50 text-sm").props("data-testid=cantidad")
+            ui.label(f"{datos['cantidad']} gasto(s) · promedio {pesos(promedio)}").classes(
+                "text-emerald-50 text-sm"
+            ).props("data-testid=cantidad")
 
         with ui.column().classes("tarjeta w-full p-6 gap-2"):
             ui.label("¿En qué se va tu plata?").classes("text-lg font-bold text-slate-700")
             if not datos["por_categoria"]:
-                ui.label("Cuando registres gastos verás aquí en qué se te va el dinero.") \
-                    .classes("text-slate-400 text-sm")
+                ui.label("Cuando registres gastos verás aquí en qué se te va el dinero.").classes(
+                    "text-slate-400 text-sm"
+                )
                 return
             ui.label("Toca una categoría para ver solo esos gastos").classes("text-xs text-slate-400 -mt-1")
             for nombre, valor in sorted(datos["por_categoria"].items(), key=lambda x: -x[1]):
                 icono, color = CATEGORIAS.get(nombre, CATEGORIAS["Otros"])
                 porcentaje = valor / datos["total"]
                 fondo = "background:#f1f5f9" if estado["filtro"] == nombre else ""
-                with ui.column().classes("fila-categoria w-full gap-1").style(fondo) \
-                        .on("click", lambda n=nombre: filtrar(n)):
+                with (
+                    ui.column()
+                    .classes("fila-categoria w-full gap-1")
+                    .style(fondo)
+                    .on("click", lambda n=nombre: filtrar(n))
+                ):
                     with ui.row().classes("w-full items-center justify-between"):
                         with ui.row().classes("items-center gap-2"):
                             ui.icon(icono).style(f"color:{color}")
                             ui.label(nombre).classes("text-slate-700")
                             ui.label(f"{porcentaje:.0%}").classes("text-xs text-slate-400")
                         ui.label(pesos(valor)).classes("font-semibold text-slate-800")
-                    ui.linear_progress(value=porcentaje, show_value=False, size="8px", color=None) \
-                        .props('rounded track-color="grey-3"').style(f"color:{color}")
+                    ui.linear_progress(value=porcentaje, show_value=False, size="8px", color=None).props(
+                        'rounded track-color="grey-3"'
+                    ).style(f"color:{color}")
 
     @ui.refreshable
     async def lista():
@@ -298,8 +325,9 @@ async def index():
                     ui.button("Ver todos", on_click=lambda: filtrar(None)).props("flat no-caps")
                 else:
                     ui.label("Aún no registras gastos").props("data-testid=lista-vacia")
-                    ui.button("Registrar mi primer gasto", icon="add",
-                              on_click=lambda: monto.run_method("focus")).props("flat no-caps")
+                    ui.button(
+                        "Registrar mi primer gasto", icon="add", on_click=lambda: monto.run_method("focus")
+                    ).props("flat no-caps")
             return
 
         # Agrupar por día, como un extracto bancario
@@ -311,23 +339,30 @@ async def index():
         for dia, gastos_dia in grupos.items():
             with ui.row().classes("w-full items-center justify-between px-2 pt-3"):
                 ui.label(etiqueta_dia(dia)).classes("text-xs font-bold uppercase tracking-wider text-slate-400")
-                ui.label(f"Total del día {pesos(sum(g['monto'] for g in gastos_dia))}").classes("text-xs text-slate-400")
+                ui.label(f"Total del día {pesos(sum(g['monto'] for g in gastos_dia))}").classes(
+                    "text-xs text-slate-400"
+                )
             for gasto in gastos_dia:
                 icono, color = CATEGORIAS.get(gasto["categoria"], CATEGORIAS["Otros"])
                 hora = datetime.fromisoformat(gasto["fecha"]).strftime("%I:%M %p").lower()
-                with ui.row().classes("gasto-item w-full items-center px-3 py-2 gap-4 no-wrap") \
-                        .props("data-testid=gasto-item"):
+                with (
+                    ui.row()
+                    .classes("gasto-item w-full items-center px-3 py-2 gap-4 no-wrap")
+                    .props("data-testid=gasto-item")
+                ):
                     with ui.element("div").classes("rounded-full p-2").style(f"background:{color}22"):
                         ui.icon(icono, size="22px").style(f"color:{color}")
                     with ui.column().classes("gap-0 grow min-w-0"):
-                        ui.label(gasto["descripcion"]).classes("font-semibold text-slate-800 truncate") \
-                            .props("data-testid=gasto-descripcion")
+                        ui.label(gasto["descripcion"]).classes("font-semibold text-slate-800 truncate").props(
+                            "data-testid=gasto-descripcion"
+                        )
                         ui.label(f"{gasto['categoria']} · {hora}").classes("text-xs text-slate-500")
-                    ui.label(pesos(gasto["monto"])).classes("font-bold text-slate-800 whitespace-nowrap") \
-                        .props("data-testid=gasto-monto")
-                    ui.button(icon="delete_outline", on_click=lambda g=gasto: eliminar(g)) \
-                        .props("flat round dense color=red-5 data-testid=btn-eliminar") \
-                        .classes("btn-borrar").tooltip("Eliminar (podrás deshacerlo)")
+                    ui.label(pesos(gasto["monto"])).classes("font-bold text-slate-800 whitespace-nowrap").props(
+                        "data-testid=gasto-monto"
+                    )
+                    ui.button(icon="delete_outline", on_click=lambda g=gasto: eliminar(g)).props(
+                        "flat round dense color=red-5 data-testid=btn-eliminar"
+                    ).classes("btn-borrar").tooltip("Eliminar (podrás deshacerlo)")
 
     # ---------- Layout ----------
     with ui.row().classes("w-full max-w-6xl mx-auto px-6 pt-4 pb-24 gap-6 items-start no-wrap max-md:flex-wrap"):
@@ -339,25 +374,36 @@ async def index():
                         with ui.row().classes("w-full items-baseline justify-between"):
                             ui.label("¿Cuánto gastaste?").classes("text-sm text-slate-500")
                             ui.label(f"máx. $ {formatear_cop(MONTO_MAXIMO)}").classes("text-xs text-slate-400")
-                        monto = ui.input(placeholder="0", on_change=al_cambiar_monto) \
-                            .props('outlined autofocus prefix=$ inputmode=numeric autocomplete=off '
-                                   'mask="###.###.###" reverse-fill-mask unmasked-value '
-                                   'data-testid=input-monto') \
-                            .classes("campo monto-grande w-full") \
-                            .on("keydown", js_handler=SOLO_DIGITOS_JS) \
+                        monto = (
+                            ui.input(placeholder="0", on_change=al_cambiar_monto)
+                            .props(
+                                "outlined autofocus prefix=$ inputmode=numeric autocomplete=off "
+                                'mask="###.###.###" reverse-fill-mask unmasked-value '
+                                "data-testid=input-monto"
+                            )
+                            .classes("campo monto-grande w-full")
+                            .on("keydown", js_handler=SOLO_DIGITOS_JS)
                             .on("keydown.enter", agregar)
+                        )
                     with ui.column().classes("gap-1 grow max-sm:w-full"):
                         ui.label("¿En qué?").classes("text-sm text-slate-500")
-                        descripcion = ui.input(placeholder="Ej: Almuerzo, bus, Netflix…",
-                                               on_change=lambda: actualizar_formulario()) \
-                            .props("outlined clearable data-testid=input-descripcion").classes("campo w-full") \
+                        descripcion = (
+                            ui.input(
+                                placeholder="Ej: Almuerzo, bus, Netflix…", on_change=lambda: actualizar_formulario()
+                            )
+                            .props("outlined clearable data-testid=input-descripcion")
+                            .classes("campo w-full")
                             .on("keydown.enter", agregar)
+                        )
                 ui.label("Categoría").classes("text-sm text-slate-500 -mb-2")
                 chips_categoria()
                 with ui.row().classes("w-full items-center justify-between gap-3 pt-2"):
                     vista_previa()
-                    boton_agregar = ui.button("Agregar gasto", icon="add", on_click=agregar) \
-                        .props("unelevated rounded size=lg no-caps data-testid=btn-agregar").classes("px-6")
+                    boton_agregar = (
+                        ui.button("Agregar gasto", icon="add", on_click=agregar)
+                        .props("unelevated rounded size=lg no-caps data-testid=btn-agregar")
+                        .classes("px-6")
+                    )
                 boton_agregar.set_enabled(False)
 
             with ui.column().classes("tarjeta w-full p-6 gap-3"):
@@ -370,17 +416,22 @@ async def index():
             await resumen()
 
     # Barra para deshacer (aparece abajo al eliminar)
-    with ui.row().classes("fixed bottom-6 left-1/2 -translate-x-1/2 z-50 items-center gap-4 no-wrap "
-                          "bg-slate-800 text-white rounded-full pl-6 pr-2 py-2 shadow-xl") \
-            .props("data-testid=barra-deshacer") as barra_deshacer:
+    with (
+        ui.row()
+        .classes(
+            "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 items-center gap-4 no-wrap "
+            "bg-slate-800 text-white rounded-full pl-6 pr-2 py-2 shadow-xl"
+        )
+        .props("data-testid=barra-deshacer") as barra_deshacer
+    ):
         texto_deshacer = ui.label()
-        ui.button("Deshacer", on_click=deshacer) \
-            .props("flat rounded no-caps color=green-3 data-testid=btn-deshacer")
+        ui.button("Deshacer", on_click=deshacer).props("flat rounded no-caps color=green-3 data-testid=btn-deshacer")
     barra_deshacer.set_visibility(False)
     ui.timer(0.5, vigilar_deshacer)
 
 
 if __name__ in {"__main__", "__mp_main__"}:
     # Mismo marranito ("savings") del encabezado, en el verde de la app
-    ui.run(title="Gastico", port=PUERTO, favicon=Path(__file__).parent / "static" / "favicon.svg",
-           reload=False, show=False)
+    ui.run(
+        title="Gastico", port=PUERTO, favicon=Path(__file__).parent / "static" / "favicon.svg", reload=False, show=False
+    )

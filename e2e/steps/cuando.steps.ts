@@ -1,6 +1,6 @@
-import { test } from '@playwright/test';
-import { Gasto } from '../data/gastos.data';
-import { GastosPage } from '../pages/gastos.page';
+import { test } from "@playwright/test";
+import { Gasto } from "../data/gastos.data";
+import { GastosPage } from "../pages/gastos.page";
 
 /**
  * CUANDO (When) = Act: la acción que realiza el usuario.

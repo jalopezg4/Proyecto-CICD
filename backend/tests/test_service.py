@@ -2,13 +2,14 @@
 
 Cada prueba sigue la estrategia AAA: Arrange (preparar), Act (actuar), Assert (verificar).
 """
+
 import pytest
 
 from app.models import Categoria
 from app.service import GastoNoEncontrado
 
-
 # ---------- agregar_gasto ----------
+
 
 def test_agregar_gasto_lo_guarda_en_la_lista_interna(service, nuevo_gasto):
     # Arrange
@@ -37,6 +38,7 @@ def test_agregar_gasto_asigna_ids_consecutivos(service, nuevo_gasto):
 
 
 # ---------- listar_gastos ----------
+
 
 def test_listar_gastos_vacio_devuelve_lista_vacia(service):
     # Arrange: servicio sin gastos
@@ -74,6 +76,7 @@ def test_listar_gastos_filtra_por_categoria(service, nuevo_gasto):
 
 # ---------- eliminar_gasto ----------
 
+
 def test_eliminar_gasto_lo_quita_de_la_lista_interna(service, nuevo_gasto):
     # Arrange
     gasto = service.agregar_gasto(nuevo_gasto())
@@ -107,6 +110,7 @@ def test_eliminar_gasto_inexistente_lanza_error(service):
 
 
 # ---------- resumen ----------
+
 
 def test_resumen_sin_gastos_es_cero(service):
     # Arrange: servicio sin gastos

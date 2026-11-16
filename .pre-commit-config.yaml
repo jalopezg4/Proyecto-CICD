@@ -1,0 +1,54 @@
+default_install_hook_types: [pre-commit, commit-msg]
+# Los hooks de código corren antes del commit (y con --all-files en CI); al validar el mensaje
+# solo corre conventional-pre-commit, que declara su propia etapa commit-msg.
+default_stages: [pre-commit, manual]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.5
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+        files: ^(backend|frontend)/.*\.py$
+      - id: ruff-format
+        files: ^(backend|frontend)/.*\.py$
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (e2e)
+        entry: npm --prefix e2e run lint
+        language: system
+        files: ^e2e/.*\.ts$
+        pass_filenames: false
+      - id: prettier
+        name: prettier (e2e)
+        entry: npm --prefix e2e run format
+        language: system
+        files: ^e2e/.*\.ts$
+        pass_filenames: false
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.109.5
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]

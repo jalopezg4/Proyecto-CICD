@@ -1,4 +1,5 @@
 """Lógica de negocio de Gastico. No sabe nada de HTTP, por eso es fácil de probar."""
+
 from datetime import datetime
 
 from .models import Gasto, GastoCreate, Resumen

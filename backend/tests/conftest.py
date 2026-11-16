@@ -15,8 +15,10 @@ def service() -> GastoService:
 @pytest.fixture
 def nuevo_gasto():
     """Fábrica de datos válidos para crear gastos."""
+
     def _crear(descripcion="Almuerzo", monto=18000, categoria=Categoria.COMIDA) -> GastoCreate:
         return GastoCreate(descripcion=descripcion, monto=monto, categoria=categoria)
+
     return _crear
 
 
