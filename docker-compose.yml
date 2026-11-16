@@ -1,0 +1,33 @@
+# Paso 5 del plan: levanta frontend y backend juntos, en red local.
+# Los nombres de servicio ("backend") son los mismos que usará ECS Service Connect.
+services:
+  backend:
+    build:
+      context: ./backend
+    image: gastico-backend:local
+    environment:
+      APP_ENV: development
+      APP_VERSION: dev
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ./frontend
+    image: gastico-frontend:local
+    environment:
+      GASTICO_API_URL: http://backend:8000
+      GASTICO_FRONT_PORT: "8080"
+      GASTICO_STORAGE_SECRET: dev-secret-local
+      APP_VERSION: dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy

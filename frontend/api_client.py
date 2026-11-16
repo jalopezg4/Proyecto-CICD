@@ -34,3 +34,6 @@ class GastosApi:
 
     async def resumen(self) -> dict:
         return await self._request("GET", "/gastos/resumen")
+
+    async def health(self) -> dict:
+        return await self._request("GET", "/health")

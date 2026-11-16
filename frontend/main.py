@@ -14,14 +14,39 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from api_client import ApiError, GastosApi
+from fastapi.responses import JSONResponse
 from formato import MONTO_MAXIMO, formatear_cop, normalizar_monto, parsear_cop, solo_digitos
-from nicegui import ui
+from nicegui import app, ui
 
 API_URL = os.getenv("GASTICO_API_URL", "http://127.0.0.1:8000")
 PUERTO = int(os.getenv("GASTICO_FRONT_PORT", "8080"))
+APP_VERSION = os.getenv("APP_VERSION", "dev")
+# NiceGUI guarda estado por cliente (sesión) y lo necesita para firmarlo
+STORAGE_SECRET = os.getenv("GASTICO_STORAGE_SECRET", "dev-secret-cambiar-en-produccion")
 SEGUNDOS_DESHACER = 6
 
 api = GastosApi(API_URL)
+
+
+@app.get("/health/live")
+async def health_live() -> dict:
+    # Liveness: no depende del backend. La usan el HEALTHCHECK de Docker, ECS
+    # y el target group del ALB, para que una caída del backend no tumbe al frontend.
+    return {"status": "ok"}
+
+
+@app.get("/health")
+async def health() -> JSONResponse:
+    # Readiness/diagnóstico: sí consulta al backend. La usan los smoke (8.1, 8.3).
+    try:
+        datos_backend = await api.health()
+        estado_backend = datos_backend.get("status", "ok")
+    except ApiError:
+        estado_backend = "down"
+    estado = "ok" if estado_backend == "ok" else "degraded"
+    cuerpo = {"status": estado, "version": APP_VERSION, "backend": estado_backend}
+    return JSONResponse(cuerpo, status_code=200 if estado == "ok" else 503)
+
 
 # categoría -> (icono, color)
 CATEGORIAS = {
@@ -433,5 +458,10 @@ async def index():
 if __name__ in {"__main__", "__mp_main__"}:
     # Mismo marranito ("savings") del encabezado, en el verde de la app
     ui.run(
-        title="Gastico", port=PUERTO, favicon=Path(__file__).parent / "static" / "favicon.svg", reload=False, show=False
+        title="Gastico",
+        port=PUERTO,
+        favicon=Path(__file__).parent / "static" / "favicon.svg",
+        reload=False,
+        show=False,
+        storage_secret=STORAGE_SECRET,
     )
