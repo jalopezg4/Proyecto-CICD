@@ -77,15 +77,23 @@ Detalle: [docs/punto3-prueba-de-aceptacion-e2e.md](docs/punto3-prueba-de-aceptac
 
 ## Pre-commit
 
-Antes de hacer el primer commit, instalar los hooks (una sola vez):
+Requisitos antes del primer commit:
+
+- `pip install pre-commit`.
+- `cd e2e && npm ci`: los hooks de eslint y prettier son `language: system`, corren con el Node
+  local y necesitan `node_modules` ya instalado.
+- Terraform instalado, solo cuando exista `infra/` (los hooks `terraform_fmt`/`terraform_validate`
+  no hacen nada mientras esa carpeta no tenga archivos `.tf`).
+
+Instalar los hooks (una sola vez):
 
 ```bash
-pip install pre-commit
 pre-commit install
 ```
 
 Desde ahí, cada `git commit` corre automáticamente ruff (Python) y eslint/prettier (`e2e/`),
-además de gitleaks y validaciones básicas de formato. Para correrlo manualmente sobre todo el repo:
+además de gitleaks y validaciones básicas de formato, y cada mensaje de commit se valida contra
+Conventional Commits (ver [CONTRIBUTING.md](CONTRIBUTING.md)). Para correrlo manualmente sobre todo el repo:
 
 ```bash
 pre-commit run --all-files
