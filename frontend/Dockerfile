@@ -3,8 +3,9 @@ FROM python:3.13-slim AS base
 
 FROM base AS builder
 WORKDIR /app
+# Solo dependencias de ejecución, con versiones fijas y verificadas por hash
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --user --require-hashes --only-binary=:all: -r requirements.txt
 
 FROM base AS runtime
 RUN groupadd --system app && useradd --system --gid app --no-create-home app

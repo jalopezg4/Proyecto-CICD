@@ -37,7 +37,8 @@ def version_esperada() -> str:
 
 def _get(url: str) -> tuple[int, str]:
     try:
-        with urllib.request.urlopen(url, timeout=TIMEOUT_SEGUNDOS) as respuesta:  # nosec B310: la URL es la del ambiente, no viene de un usuario
+        # B310: la URL es la del ambiente (variable del pipeline), no viene de un usuario
+        with urllib.request.urlopen(url, timeout=TIMEOUT_SEGUNDOS) as respuesta:  # nosec B310
             return respuesta.status, respuesta.read().decode("utf-8")
     except urllib.error.HTTPError as error:
         return error.code, error.read().decode("utf-8")

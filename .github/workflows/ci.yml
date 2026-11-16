@@ -1,6 +1,10 @@
-# CI base de Gastico (paso 3 del plan).
-# Corre en cada PR hacia main y en cada push a main. El job se llama "ci" porque
-# es el check obligatorio del ruleset proteger-main: no cambiar el nombre.
+# CI de Gastico (pasos 3 y 7 del plan).
+# Corre en cada PR hacia main, en cada push a main y manualmente.
+#
+#   calidad   → pre-commit, seguridad (Bandit, pip-audit, Checkov), pruebas con cobertura y SonarCloud
+#   imagenes  → build de las 2 imágenes, Trivy, y E2E + smoke contra docker compose
+#   ci        → resume los dos anteriores. Es el check obligatorio del ruleset proteger-main:
+#               no cambiar su nombre.
 name: CI
 
 on:
@@ -19,14 +23,20 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  ci:
-    name: ci
+  # ---------------------------------------------------------------------------
+  # Estáticas, seguridad del código y pruebas unitarias/componente
+  # ---------------------------------------------------------------------------
+  calidad:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # SonarCloud usa el historial para saber qué código es nuevo
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -40,37 +50,162 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
-      # --- Estáticas: los mismos hooks que corre cada integrante antes del commit ---
-
-      - name: Install e2e dependencies (eslint y prettier)
-        run: npm ci --prefix e2e
-
-      - name: Run pre-commit
+      - name: Install tools and dependencies (versiones fijas con hash)
         run: |
-          pip install pre-commit
-          pre-commit run --all-files --show-diff-on-failure
+          pip install --require-hashes --only-binary=:all: -r requirements-ci.txt
+          pip install --require-hashes --only-binary=:all: -r backend/requirements-dev.txt
+          pip install --require-hashes --only-binary=:all: -r frontend/requirements-dev.txt
+          npm ci --prefix e2e
 
-      # --- Pruebas unitarias y de componente con cobertura mínima del 80 % ---
+      # --- Estáticas ---
 
-      - name: Install Python dependencies
+      - name: Pre-commit (ruff, eslint, prettier, gitleaks, terraform)
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      - name: Bandit (SAST)
+        run: bandit -r backend/app frontend smoke -x frontend/tests -ll
+
+      - name: pip-audit (vulnerabilidades en dependencias)
         run: |
-          pip install -r backend/requirements.txt
-          pip install -r frontend/requirements.txt pytest pytest-cov
+          pip-audit --strict --no-deps --disable-pip -r backend/requirements.txt
+          pip-audit --strict --no-deps --disable-pip -r frontend/requirements.txt
+
+      - name: Checkov (IaC)
+        if: hashFiles('infra/**/*.tf') != ''
+        uses: bridgecrewio/checkov-action@99bb2caf247dfd9f03cf984373bc6043d4e32ebf # v12.1347.0
+        with:
+          directory: infra
+          framework: terraform
+          quiet: true
+
+      # --- Unitarias y de componente con cobertura mínima del 80 % ---
 
       - name: Backend tests
         working-directory: backend
-        run: python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+        run: python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=80 --junitxml=junit.xml
 
       - name: Frontend tests
         working-directory: frontend
-        run: python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+        run: python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=80 --junitxml=junit.xml
 
-      - name: Upload coverage reports
+      # --- SonarCloud ---
+
+      - name: Bandit report for SonarCloud
+        if: env.SONAR_TOKEN != ''
+        run: bandit -r backend/app frontend smoke -x frontend/tests -f json -o bandit-report.json --exit-zero
+
+      - name: SonarCloud Scan
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8
+        env:
+          SONAR_HOST_URL: https://sonarcloud.io
+
+      - name: SonarCloud no configurado
+        if: env.SONAR_TOKEN == ''
+        run: echo "::warning title=SonarCloud::Falta el secret SONAR_TOKEN; el análisis de SonarCloud se omitió."
+
+      - name: Upload reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: coverage
+          name: reportes-calidad
           path: |
             backend/coverage.xml
             frontend/coverage.xml
+            backend/junit.xml
+            frontend/junit.xml
+            bandit-report.json
           if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Imágenes: build, escaneo de vulnerabilidades e integración en contenedores
+  # ---------------------------------------------------------------------------
+  imagenes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      IMAGE_TAG: sha-${{ github.sha }}
+      APP_VERSION: sha-${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Trivy (backend)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: gastico-backend:${{ env.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Trivy (frontend)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: gastico-frontend:${{ env.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+          skip-setup-trivy: true
+
+      - name: Start app (docker compose)
+        run: docker compose up -d --wait
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.13'
+
+      - name: E2E (Playwright contra los contenedores)
+        env:
+          E2E_BASE_URL: http://localhost:8080
+        run: |
+          npm ci --prefix e2e
+          npx --prefix e2e playwright install --with-deps chromium
+          npm test --prefix e2e
+
+      - name: Smoke (solo lectura)
+        env:
+          SMOKE_BASE_URL: http://localhost:8080
+          SMOKE_VERSION: ${{ env.APP_VERSION }}
+        run: |
+          pip install --require-hashes --only-binary=:all: -r backend/requirements-dev.txt
+          python -m pytest smoke -v
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Check obligatorio: pasa solo si calidad e imagenes pasaron
+  # ---------------------------------------------------------------------------
+  ci:
+    name: ci
+    if: always()
+    needs: [calidad, imagenes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resultado
+        run: |
+          echo "calidad: ${{ needs.calidad.result }} · imagenes: ${{ needs.imagenes.result }}"
+          test "${{ needs.calidad.result }}" = "success" && test "${{ needs.imagenes.result }}" = "success"

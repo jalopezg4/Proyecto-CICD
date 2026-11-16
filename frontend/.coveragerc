@@ -3,8 +3,8 @@ source = .
 branch = True
 omit =
     tests/*
+    # La UI de NiceGUI se cubre con las pruebas E2E de Playwright, no con pruebas unitarias
     main.py
-    api_client.py
 
 [report]
 show_missing = True
