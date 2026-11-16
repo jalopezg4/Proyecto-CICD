@@ -90,9 +90,12 @@ jobs:
 
       # --- SonarCloud ---
 
-      - name: Bandit report for SonarCloud
+      # Un reporte por módulo, con rutas relativas a cada uno (así los resuelve SonarCloud)
+      - name: Bandit reports for SonarCloud
         if: env.SONAR_TOKEN != ''
-        run: bandit -r backend/app frontend smoke -x frontend/tests -f json -o bandit-report.json --exit-zero
+        run: |
+          (cd backend && bandit -r app -f json -o bandit-report.json --exit-zero)
+          (cd frontend && bandit -r . -x ./tests,./.venv -f json -o bandit-report.json --exit-zero)
 
       - name: SonarCloud Scan
         if: env.SONAR_TOKEN != ''
@@ -114,7 +117,8 @@ jobs:
             frontend/coverage.xml
             backend/junit.xml
             frontend/junit.xml
-            bandit-report.json
+            backend/bandit-report.json
+            frontend/bandit-report.json
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
