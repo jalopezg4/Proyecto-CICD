@@ -28,8 +28,16 @@ SEGUNDOS_DESHACER = 6
 api = GastosApi(API_URL)
 
 
+@app.get("/health/live")
+async def health_live() -> dict:
+    # Liveness: no depende del backend. La usan el HEALTHCHECK de Docker, ECS
+    # y el target group del ALB, para que una caída del backend no tumbe al frontend.
+    return {"status": "ok"}
+
+
 @app.get("/health")
 async def health() -> JSONResponse:
+    # Readiness/diagnóstico: sí consulta al backend. La usan los smoke (8.1, 8.3).
     try:
         datos_backend = await api.health()
         estado_backend = datos_backend.get("status", "ok")
