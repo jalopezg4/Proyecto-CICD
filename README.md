@@ -90,3 +90,7 @@ además de gitleaks y validaciones básicas de formato. Para correrlo manualment
 ```bash
 pre-commit run --all-files
 ```
+
+## Cómo contribuir
+
+Ramas, formato de commits, Pull Requests y versiones: [CONTRIBUTING.md](CONTRIBUTING.md).
