@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI, HTTPException
+import os  # error intencional: import sin usar
 from fastapi.middleware.cors import CORSMiddleware
 
 from .models import Gasto, GastoCreate, Resumen
