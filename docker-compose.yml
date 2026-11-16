@@ -4,7 +4,8 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: .
+      target: backend
     image: gastico-backend:${IMAGE_TAG:-local}
     environment:
       APP_ENV: development
@@ -20,7 +21,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: .
+      target: frontend
     image: gastico-frontend:${IMAGE_TAG:-local}
     environment:
       GASTICO_API_URL: http://backend:8000
