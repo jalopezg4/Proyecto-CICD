@@ -24,7 +24,7 @@ app sola), fixtures, `test.step` para BDD, modo UI y reporte HTML, todo sin plug
 
 ```
 e2e/
-├── playwright.config.ts        # Levanta backend (8001) y frontend (8081) con webServer
+├── playwright.config.ts        # Levanta backend (8101) y frontend (8181) con webServer
 ├── data/gastos.data.ts         # Datos de prueba (nuevoGasto con sufijo único)
 ├── locators/gastos.locators.ts # DÓNDE está cada elemento (data-testid)
 ├── pages/
@@ -96,7 +96,7 @@ Resultado tras los arreglos: **96 de 96** corridas en verde (8 repeticiones × 3
 6 navegadores en paralelo).
 
 Otras decisiones:
-- **Puertos separados (8001/8081):** las E2E levantan su propia copia de la app y no tocan
+- **Puertos separados (8101/8181):** las E2E levantan su propia copia de la app y no tocan
   la de desarrollo (8000/8080).
 - **Datos únicos:** el backend guarda en memoria, así que cada gasto lleva un sufijo
   aleatorio (`Comprar pan k3x9a`) y las pruebas pueden correr en paralelo.

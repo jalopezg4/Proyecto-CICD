@@ -37,9 +37,22 @@ export class GastosLocators {
     return this.itemPorDescripcion(descripcion).getByTestId("btn-eliminar");
   }
 
+  /** Los chips del filtro no tienen data-testid: se buscan por su texto dentro del contenedor. */
+  chipFiltro(categoria: Categoria): Locator {
+    return this.page.getByTestId("filtro-categoria").getByText(categoria, { exact: true });
+  }
+
   // ---------- Resumen y deshacer ----------
   get total(): Locator {
     return this.page.getByTestId("total");
+  }
+  get cantidad(): Locator {
+    return this.page.getByTestId("cantidad");
+  }
+
+  /** Las notificaciones no tienen data-testid: se usa la clase de Quasar y el texto. */
+  notificacion(texto: string): Locator {
+    return this.page.locator(".q-notification").filter({ hasText: texto });
   }
   get barraDeshacer(): Locator {
     return this.page.getByTestId("barra-deshacer");

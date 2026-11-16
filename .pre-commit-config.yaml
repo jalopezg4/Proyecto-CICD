@@ -17,9 +17,9 @@ repos:
     hooks:
       - id: ruff-check
         args: [--fix]
-        files: ^(backend|frontend)/.*\.py$
+        files: ^(backend|frontend|smoke)/.*\.py$
       - id: ruff-format
-        files: ^(backend|frontend)/.*\.py$
+        files: ^(backend|frontend|smoke)/.*\.py$
 
   - repo: local
     hooks:

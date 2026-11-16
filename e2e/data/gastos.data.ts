@@ -11,6 +11,15 @@ export interface Gasto {
   categoria: Categoria;
 }
 
+/** Lo que muestra el resumen en un momento dado (para comparar antes y después). */
+export interface ResumenAnotado {
+  total: number;
+  cantidad: number;
+}
+
+/** 18000 -> "$ 18.000", igual que la función pesos() del frontend. */
+export const enPesos = (valor: number): string => `$ ${valor.toLocaleString("de-DE")}`;
+
 const sufijo = () => Math.random().toString(36).slice(2, 7);
 
 export function nuevoGasto(
@@ -21,7 +30,7 @@ export function nuevoGasto(
   return {
     descripcion: `${descripcion} ${sufijo()}`,
     monto: String(monto),
-    montoEnPantalla: `$ ${monto.toLocaleString("de-DE")}`, // separador de miles con punto, como COP
+    montoEnPantalla: enPesos(monto), // separador de miles con punto, como COP
     categoria,
   };
 }

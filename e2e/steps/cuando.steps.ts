@@ -1,5 +1,5 @@
 import { test } from "@playwright/test";
-import { Gasto } from "../data/gastos.data";
+import { Categoria, Gasto } from "../data/gastos.data";
 import { GastosPage } from "../pages/gastos.page";
 
 /**
@@ -35,6 +35,31 @@ export class Cuando {
   async presionaDeshacer(): Promise<void> {
     await test.step('Cuando presiona "Deshacer"', async () => {
       await this.gastosPage.presionarDeshacer();
+    });
+  }
+
+  async escribeElMontoYLaDescripcion(monto: string, descripcion: string): Promise<void> {
+    await test.step(`Cuando escribe el monto ${monto} y la descripción "${descripcion}"`, async () => {
+      await this.gastosPage.escribirMonto(monto);
+      await this.gastosPage.escribirDescripcion(descripcion);
+    });
+  }
+
+  async presionaEnterEnLaDescripcion(): Promise<void> {
+    await test.step("Cuando presiona Enter estando en la descripción", async () => {
+      await this.gastosPage.presionarEnterEnDescripcion();
+    });
+  }
+
+  async tocaElFiltro(categoria: Categoria): Promise<void> {
+    await test.step(`Cuando toca "${categoria}" en el filtro de Movimientos`, async () => {
+      await this.gastosPage.filtrarPor(categoria);
+    });
+  }
+
+  async recargaLaPagina(): Promise<void> {
+    await test.step("Cuando recarga la página", async () => {
+      await this.gastosPage.recargar();
     });
   }
 }

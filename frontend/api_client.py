@@ -10,11 +10,26 @@ class ApiError(Exception):
 class GastosApi:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
+        self._client: httpx.AsyncClient | None = None
+
+    def _cliente(self) -> httpx.AsyncClient:
+        # Un solo cliente para toda la app: crear uno cuesta ~0,3 s de CPU (carga los certificados
+        # SSL) y la página hace 3 llamadas. Con uno nuevo por llamada, 8 usuarios a la vez pasaban
+        # de los 3 s que NiceGUI espera y la página respondía 500 (lo encontraron las E2E del paso 6).
+        # Se crea la primera vez que se usa, ya dentro del event loop de NiceGUI.
+        if self._client is None:
+            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=5)
+        return self._client
+
+    async def cerrar(self) -> None:
+        """Cierra el cliente compartido (se llama al apagar la app)."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     async def _request(self, method: str, path: str, **kwargs):
         try:
-            async with httpx.AsyncClient(base_url=self.base_url, timeout=5) as client:
-                respuesta = await client.request(method, path, **kwargs)
+            respuesta = await self._cliente().request(method, path, **kwargs)
         except httpx.HTTPError as error:
             raise ApiError("No se pudo conectar con el backend") from error
         if respuesta.is_error:
