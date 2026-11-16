@@ -36,8 +36,10 @@ RUN pip install --no-cache-dir --user --require-hashes --only-binary=:all: -r re
 
 # --- Backend: API FastAPI, privada y sin IP pública en AWS ---
 FROM runtime-base AS backend
-COPY --from=builder-backend --chown=app:app /root/.local /home/app/.local
-COPY --chown=app:app backend/app ./app
+# Código y dependencias quedan de root (solo lectura para "app"): si alguien compromete el
+# proceso, no puede modificarlos.
+COPY --from=builder-backend /root/.local /home/app/.local
+COPY backend/app ./app
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
@@ -46,9 +48,11 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # --- Frontend: NiceGUI, detrás del ALB con sticky sessions ---
 FROM runtime-base AS frontend
-COPY --from=builder-frontend --chown=app:app /root/.local /home/app/.local
-COPY --chown=app:app frontend/main.py frontend/api_client.py frontend/formato.py ./
-COPY --chown=app:app frontend/static ./static
+COPY --from=builder-frontend /root/.local /home/app/.local
+COPY frontend/main.py frontend/api_client.py frontend/formato.py ./
+COPY frontend/static ./static
+# Código de solo lectura; "app" solo puede escribir en .nicegui, donde NiceGUI guarda sus datos
+RUN mkdir .nicegui && chown app:app .nicegui
 USER app
 EXPOSE 8080
 # Liveness: /health/live no depende del backend (ver PR #5)
