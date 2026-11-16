@@ -34,7 +34,7 @@ Los escenarios a los que se refiere cada punto están en [escenarios-bdd.md](esc
   - El ALB es solo HTTP (no hay dominio ni certificado en el Learner Lab). Que el navegador muestre
     **"No es seguro"** es lo esperado: **no es un defecto** y no es motivo para rechazar la QA.
 - [ ] `/health` responde 200 con estado "ok"
-- [ ] La versión que informa `/health` es la que se quería desplegar: `sha-xxxxxxx` en staging, `vX.Y.Z` (con la `v`) en producción (8.1)
+- [ ] La versión que informa `/health` es el commit que se quería desplegar en staging (`sha-xxxxxxx`) (8.1). La versión de producción (`vX.Y.Z`) se revisa en la sección E, en el paso 12
 - [ ] Se anotó si el ambiente está recién desplegado (si es así, debe estar sin gastos; ver 6.1)
 
 ## B. Funcionalidad (staging)
