@@ -1,11 +1,30 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .models import Gasto, GastoCreate, Resumen
 from .service import GastoNoEncontrado, GastoService
 
-app = FastAPI(title="Gastico API", description="Control de gastos personales")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+APP_VERSION = os.getenv("APP_VERSION", "dev")
+# En Learner Lab el backend es privado (sin IP pública): solo lo llama el frontend
+# desde el servidor, nunca el navegador. El origen por defecto es el frontend local.
+ALLOWED_ORIGINS = [
+    origen.strip()
+    for origen in os.getenv("GASTICO_ALLOWED_ORIGINS", "http://127.0.0.1:8080").split(",")
+    if origen.strip()
+]
+# /docs y /openapi.json quedan apagados en producción (decisión del plan)
+ES_PRODUCCION = os.getenv("APP_ENV", "development") == "production"
+
+app = FastAPI(
+    title="Gastico API",
+    description="Control de gastos personales",
+    docs_url=None if ES_PRODUCCION else "/docs",
+    redoc_url=None if ES_PRODUCCION else "/redoc",
+    openapi_url=None if ES_PRODUCCION else "/openapi.json",
+)
+app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 _service = GastoService()
 
@@ -16,7 +35,7 @@ def get_service() -> GastoService:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 @app.post("/gastos", response_model=Gasto, status_code=201)

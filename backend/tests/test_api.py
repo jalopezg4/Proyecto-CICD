@@ -27,7 +27,9 @@ def test_health_responde_ok(client):
 
     # Assert
     assert respuesta.status_code == 200
-    assert respuesta.json() == {"status": "ok"}
+    cuerpo = respuesta.json()
+    assert cuerpo["status"] == "ok"
+    assert "version" in cuerpo
 
 
 # ---------- POST /gastos ----------
