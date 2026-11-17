@@ -134,6 +134,8 @@ jobs:
     env:
       IMAGE_TAG: sha-${{ github.sha }}
       APP_VERSION: sha-${{ github.sha }}
+      # Sin attestations de buildx: la imagen queda como un solo manifiesto que ECR sí puede escanear
+      BUILDX_NO_DEFAULT_ATTESTATIONS: '1'
 
     steps:
       - name: Checkout

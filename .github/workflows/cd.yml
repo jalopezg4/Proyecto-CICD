@@ -101,7 +101,9 @@ jobs:
               echo "gastico-$servicio:$VERSION ya está en ECR"
             else
               docker tag "gastico-$servicio:$VERSION" "$repo:$VERSION"
-              docker push "$repo:$VERSION"
+              # Docker 29 guarda las imágenes con containerd y por defecto sube un "image index";
+              # ECR no puede escanear un index. Se sube solo el manifiesto linux/amd64.
+              docker push --platform linux/amd64 "$repo:$VERSION"
             fi
           done
 
@@ -227,8 +229,10 @@ jobs:
           path: e2e/playwright-report/
           if-no-files-found: ignore
 
-      # Solo una versión que pasó todas las pruebas queda como "last-good" (base del rollback, D7)
+      # Solo una versión que pasó todas las pruebas queda como "last-good" (base del rollback, D7).
+      # Las credenciales se cargan siempre, para que el resumen de evidencia salga aunque algo falle.
       - name: Configure AWS credentials
+        if: always()
         uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -240,5 +244,72 @@ jobs:
         run: |
           aws ssm put-parameter --name /gastico/staging/last-good \
             --value "$VERSION" --type String --overwrite >/dev/null
-          echo "### Staging quedó en $VERSION ✅" >> "$GITHUB_STEP_SUMMARY"
-          echo "$BASE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      # Evidencia de AWS en el resumen del run: así el equipo (y la QA del paso 10) ve el
+      # estado de la infraestructura desde la pestaña Actions, sin credenciales de AWS.
+      - name: AWS evidence (resumen del run)
+        if: always()
+        run: |
+          {
+            echo "## Staging: $VERSION"
+            echo
+            echo "**URL:** $BASE_URL"
+            echo
+            echo "**/health:** \`$(curl -s -m 10 "$BASE_URL/health" || echo 'sin respuesta')\`"
+            echo
+            echo "### Servicios de ECS"
+            echo "| Servicio | Estado | Tareas corriendo / deseadas |"
+            echo "|---|---|---|"
+            aws ecs describe-services --cluster gastico-staging \
+              --services gastico-staging-backend gastico-staging-frontend \
+              --query 'services[].[serviceName,status,runningCount,desiredCount]' --output text |
+              while read -r nombre estado corriendo deseadas; do
+                echo "| $nombre | $estado | $corriendo / $deseadas |"
+              done
+            echo
+            echo "### Target groups del ALB"
+            echo "| Target group | Salud |"
+            echo "|---|---|"
+            for tg in gastico-staging-tg gastico-staging-backend-tg; do
+              arn=$(aws elbv2 describe-target-groups --names "$tg" --query 'TargetGroups[0].TargetGroupArn' --output text)
+              salud=$(aws elbv2 describe-target-health --target-group-arn "$arn" \
+                --query 'TargetHealthDescriptions[].TargetHealth.State' --output text)
+              echo "| $tg | $salud |"
+            done
+            echo
+            echo "### Backend inaccesible desde internet"
+            echo "Su security group (\`gastico-staging-backend\`) solo acepta el puerto 8000 desde el ALB interno:"
+            echo '```'
+            aws ec2 describe-security-groups --filters Name=group-name,Values=gastico-staging-backend \
+              --query 'SecurityGroups[0].IpPermissions[].{puerto:FromPort,desde:UserIdGroupPairs[0].GroupId,cidr:IpRanges[0].CidrIp}' \
+              --output table
+            echo '```'
+            echo
+            echo "### Escaneo de ECR (tag $VERSION)"
+            echo "| Repositorio | Hallazgos por severidad |"
+            echo "|---|---|"
+            for repo in gastico-backend gastico-frontend; do
+              # El escaneo al subir tarda unos segundos en aparecer: se reintenta hasta 2 minutos
+              conteo=""
+              for i in $(seq 1 12); do
+                estado=$(aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$VERSION" \
+                  --query 'imageDetails[0].imageScanStatus.status' --output text 2>/dev/null)
+                if [ "$estado" = "COMPLETE" ]; then
+                  conteo=$(aws ecr describe-image-scan-findings --repository-name "$repo" --image-id imageTag="$VERSION" \
+                    --query 'imageScanFindings.findingSeverityCounts' --output json | tr -d '\n ')
+                  break
+                fi
+                sleep 10
+              done
+              echo "| $repo | ${conteo:-escaneo no disponible ($estado)} |"
+            done
+            echo
+            echo "_ECR también reporta vulnerabilidades sin arreglo disponible; Trivy en el CI solo falla con las que tienen arreglo._"
+            echo
+            echo "### SSM (base del rollback)"
+            echo "| Parámetro | Valor |"
+            echo "|---|---|"
+            for p in current last-good; do
+              echo "| /gastico/staging/$p | $(aws ssm get-parameter --name "/gastico/staging/$p" --query Parameter.Value --output text) |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

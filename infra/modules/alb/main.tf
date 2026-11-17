@@ -19,6 +19,9 @@ resource "aws_lb_target_group" "este" {
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = var.vpc_id
+  # Por defecto AWS espera 300 s antes de sacar una tarea vieja del ALB: cada despliegue y cada
+  # rollback tardaba 5 minutos de más. 30 s alcanzan para terminar las peticiones en curso.
+  deregistration_delay = 30
 
   health_check {
     path                = var.health_check_path
