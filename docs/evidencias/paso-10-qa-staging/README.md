@@ -19,9 +19,9 @@ Los gastos con nombres como "QA Almuerzo 3bp5" o "QA Fin 3bp5" son de esta QA.
 
 ## Resultado
 
-**Secciones A, B, C y D: todo pasa, salvo el escenario 8.3, que queda pendiente porque
-necesita bajar el backend en AWS.** No hay defectos. Hay 4 observaciones de severidad Baja o
-sin severidad, al final.
+**Secciones A, B, C y D: todo pasa, incluido el escenario 8.3** (backend caído), que se probó
+después con el Squad Plataforma sobre `sha-0d9ed2d`. No hay defectos. Hay 4 observaciones de
+severidad Baja o sin severidad, al final.
 
 ## A. Antes de empezar
 
@@ -77,9 +77,26 @@ sin severidad, al final.
 - [x] Dos pestañas registrando a la vez: las dos funcionan, y al recargar cada una ve los gastos de la otra (sticky sessions)
 - [x] Cambiar de categoría, filtrar, registrar y eliminar varias veces seguidas no traba la pantalla
 - [x] No hay errores en la consola del navegador (0 errores en toda la corrida, en las dos pestañas)
-- [ ] **Pendiente:** con el backend en 0 tareas, `/health` responde 503 `degraded`/`down` y vuelve a 200 al subirlo a 1 (8.3). Necesita cambiar el servicio en AWS, así que se hace con el Squad Plataforma. En `docker compose` ya se verificó (revisión del PR #5): 503 `{"status":"degraded","backend":"down"}`, y vuelve a "ok" al levantar el backend
+- [x] Con el backend en 0 tareas, `/health` responde 503 `degraded`/`down` y vuelve a 200 al subirlo a 1 (8.3). Detalle abajo
 
 ![Dos pestañas](c1-dos-pestanas.jpg)
+
+### 8.3: el backend se cae (17 de noviembre, 20:56 UTC, versión `sha-0d9ed2d`)
+
+Se bajó el servicio `gastico-staging-backend` a 0 tareas con
+`aws ecs update-service --desired-count 0` y luego se volvió a 1:
+
+| Momento | `/health` | `/health/live` | Página `/` | Target group del frontend |
+|---|---|---|---|---|
+| Antes | 200 `ok`, `backend: ok` | 200 | 200 | healthy |
+| Backend en 0 tareas | **503 `degraded`, `backend: down`** | 200 | 200 | **healthy** |
+| Backend de vuelta en 1 tarea (50 s) | 200 `ok`, `backend: ok` | 200 | 200 | healthy |
+
+Esto confirma el diseño del paso 5:
+- el smoke detecta la caída del backend, porque `/health` da 503;
+- el frontend **no** se reinicia ni sale del ALB, porque su health check usa `/health/live`, que no depende del backend.
+
+![/health con el backend caído](d1-health-backend-caido.jpg)
 
 ## D. AWS y GitHub
 
@@ -103,5 +120,5 @@ No se encontraron defectos.
 |---|---|---|---|
 | 1 | Con clics de máquina, sin ninguna pausa, en los chips del filtro (Comida → Todas → Transporte → Todas…), el filtro puede terminar en otra categoría: un clic cae sobre un chip que se está redibujando. Con 300 ms entre clics (ritmo humano rápido) siempre termina bien | Baja | Ninguna acción por ahora |
 | 2 | Si el monto se borra y se vuelve a escribir a ~30 ms por tecla, a veces se pierde un dígito (5000 → 500). A 80-100 ms por tecla nunca pasa | Baja | Ninguna acción por ahora |
-| 3 | El escaneo de ECR de `sha-98fdf42` sale "no disponible": la imagen se subió como *image index* | — | Lo corrige el PR #11 |
-| 4 | El checklist dice "el backend no tiene IP pública". Desde el PR #8 la tarea sí tiene IP pública, solo para salir a ECR y CloudWatch, pero su security group no acepta nada que no venga del ALB interno. El objetivo (inalcanzable desde internet) se cumple | — | Actualizar ese punto del checklist |
+| 3 | El escaneo de ECR de `sha-98fdf42` sale "no disponible": la imagen se subió como *image index* | — | **Resuelto** en el PR #11. Con `sha-0d9ed2d` las dos imágenes se escanean al subir: 2 HIGH, 11 MEDIUM y 3 LOW, todas sin arreglo disponible (por eso Trivy no las bloquea) |
+| 4 | El checklist dice "el backend no tiene IP pública". Desde el PR #8 la tarea sí tiene IP pública, solo para salir a ECR y CloudWatch, pero su security group no acepta nada que no venga del ALB interno. El objetivo (inalcanzable desde internet) se cumple | — | **Resuelto**: el punto del checklist quedó corregido en este PR |
