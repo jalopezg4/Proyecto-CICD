@@ -11,3 +11,10 @@ playwright-report/
 .ruff_cache/
 junit.xml
 bandit-report.json
+
+# Terraform
+**/.terraform/
+.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.*
+*.tfplan

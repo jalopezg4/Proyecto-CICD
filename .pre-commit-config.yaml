@@ -41,6 +41,12 @@ repos:
     hooks:
       - id: terraform_fmt
       - id: terraform_validate
+        # Los módulos (infra/modules/**) no son root modules (no tienen su propio backend ni
+        # required_providers): no se pueden "terraform init" solos. Solo se valida infra/ (la
+        # raíz), y sin tocar el backend S3 real (-backend=false): el bucket no existe en CI.
+        exclude: ^infra/modules/
+        args:
+          - --tf-init-args=-backend=false
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2
