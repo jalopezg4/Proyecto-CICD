@@ -66,4 +66,8 @@ resource "aws_ecs_service" "este" {
     enable   = true
     rollback = true
   }
+
+  # Sin esto, "terraform apply" termina antes de que ECS termine el despliegue: si el circuit
+  # breaker hace rollback, el pipeline nunca se entera (justo el nivel 1 del rollback, D8).
+  wait_for_steady_state = true
 }

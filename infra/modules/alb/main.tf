@@ -5,6 +5,9 @@ resource "aws_lb" "este" {
   security_groups    = [var.security_group_id]
   subnets            = var.subnet_ids
 
+  # CKV_AWS_131: sin esto, el ALB reenvía headers HTTP malformados en vez de descartarlos.
+  drop_invalid_header_fields = true
+
   tags = { Name = "${var.name}-alb" }
 }
 

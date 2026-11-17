@@ -4,6 +4,9 @@ resource "aws_ecr_repository" "este" {
   count                = var.manage ? 1 : 0
   name                 = var.name
   image_tag_mutability = "IMMUTABLE"
+  # Sin esto, "terraform destroy" falla si el repo tiene imágenes, y en la demo siempre
+  # las va a tener.
+  force_delete = true
 
   image_scanning_configuration {
     scan_on_push = true

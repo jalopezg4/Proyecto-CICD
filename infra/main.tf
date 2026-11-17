@@ -1,16 +1,3 @@
-# El módulo alb se generalizó para servir también al ALB interno del backend: estos recursos
-# se renombraron (ya no son específicos de "frontend"). Sin esto, Terraform los trataría como
-# un recurso nuevo que choca por nombre con el que ya existe en AWS, en vez de un rename.
-moved {
-  from = module.alb.aws_lb_target_group.frontend
-  to   = module.alb.aws_lb_target_group.este
-}
-
-moved {
-  from = module.alb.aws_lb_listener.http
-  to   = module.alb.aws_lb_listener.este
-}
-
 locals {
   # terraform.workspace vale "default" si nadie seleccionó "staging"/"production" (ver
   # infra/README.md): seleccionar el workspace es responsabilidad de quien aplica, no se valida
@@ -35,7 +22,6 @@ data "aws_iam_role" "lab" {
 module "network" {
   source                       = "./modules/network"
   name                         = local.name
-  environment                  = local.environment
   crear_s3_endpoint_compartido = local.gestiona_recursos_compartidos
 }
 
@@ -102,8 +88,11 @@ module "backend" {
   task_role_arn      = data.aws_iam_role.lab.arn
   subnet_ids         = module.network.subnet_ids
   security_group_id  = module.network.backend_security_group_id
-  assign_public_ip   = false # D3: el backend no tiene IP pública
-  target_group_arn   = module.alb_backend.target_group_arn
+  # D3: nadie puede iniciar una conexión hacia el backend salvo el ALB interno (lo bloquea su
+  # SG); la IP pública es solo para que pueda bajar su imagen de ECR y mandar logs sin pagar
+  # VPC endpoints de interfaz (ver revisión del PR #8).
+  assign_public_ip = true
+  target_group_arn = module.alb_backend.target_group_arn
 
   environment_variables = {
     APP_ENV     = local.environment
@@ -112,11 +101,14 @@ module "backend" {
 }
 
 module "frontend" {
-  source             = "./modules/ecs-service"
-  name               = "${local.name}-frontend"
-  cluster_arn        = aws_ecs_cluster.este.arn
-  image              = "${module.ecr_frontend.repository_url}:${var.frontend_image_tag}"
-  container_port     = 8080
+  source         = "./modules/ecs-service"
+  name           = "${local.name}-frontend"
+  cluster_arn    = aws_ecs_cluster.este.arn
+  image          = "${module.ecr_frontend.repository_url}:${var.frontend_image_tag}"
+  container_port = 8080
+  # La prueba de carga del paso 6 mostró que la página del frontend es lo más pesado.
+  cpu                = 512
+  memory             = 1024
   execution_role_arn = data.aws_iam_role.lab.arn
   task_role_arn      = data.aws_iam_role.lab.arn
   subnet_ids         = module.network.subnet_ids

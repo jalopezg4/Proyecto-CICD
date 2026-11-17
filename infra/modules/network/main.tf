@@ -17,18 +17,17 @@ data "aws_route_tables" "default" {
 }
 
 locals {
-  # Reparte las subredes de la VPC por defecto entre los dos ambientes: así cada uno queda en
-  # AZs distintas y los VPC endpoints de interfaz (que son 1 por subred) no compiten entre
-  # workspaces. Hacen falta al menos 4 subredes en la VPC por defecto (2 por ambiente).
-  subredes_ordenadas = sort(data.aws_subnets.default.ids)
-  offset             = var.environment == "staging" ? 0 : 2
-  subnet_ids         = slice(local.subredes_ordenadas, local.offset, local.offset + 2)
+  # Las dos ambientes comparten todas las subredes de la VPC por defecto: ya no hay VPC
+  # endpoints de interfaz (1 por subred) que puedan competir entre workspaces, así que no hace
+  # falta repartirlas (ver infra/README.md, revisión del PR #8).
+  subnet_ids = data.aws_subnets.default.ids
 }
 
 check "suficientes_subredes" {
   assert {
-    condition     = length(local.subredes_ordenadas) >= 4
-    error_message = "La VPC por defecto necesita al menos 4 subredes (2 por ambiente); tiene ${length(local.subredes_ordenadas)}."
+    # El ALB necesita al menos 2 subredes en AZs distintas.
+    condition     = length(local.subnet_ids) >= 2
+    error_message = "La VPC por defecto necesita al menos 2 subredes; tiene ${length(local.subnet_ids)}."
   }
 }
 
@@ -116,11 +115,17 @@ resource "aws_security_group" "alb_backend" {
   tags = { Name = "${var.name}-alb-backend" }
 }
 
-# D3: backend privado, sin IP pública. Solo lo alcanza el ALB interno (que a su vez solo
-# recibe del frontend).
+# D3: el backend no es alcanzable desde fuera de la VPC (ni directamente desde el frontend):
+# solo recibe del ALB interno. Tiene IP pública solo para egress (bajar su imagen de ECR,
+# mandar logs a CloudWatch); nadie puede iniciar una conexión hacia él salvo el ALB interno.
+# Antes esto se resolvía con VPC endpoints de interfaz, pero costaban ~USD 0.12/h por ambiente
+# y además con private_dns_enabled=true (necesario para que ECS los use al resolver ECR)
+# afectan a TODA la VPC: producción no podía crear los suyos propios (ya existían los de
+# staging) y de paso el frontend también intentaba resolver hacia ellos y se quedaba sin
+# acceso. Ver la revisión del PR #8.
 resource "aws_security_group" "backend" {
   name        = "${var.name}-backend"
-  description = "Backend de ${var.name}: privado, solo trafico del ALB interno"
+  description = "Backend de ${var.name}: solo recibe trafico del ALB interno"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
@@ -132,9 +137,7 @@ resource "aws_security_group" "backend" {
   }
 
   egress {
-    # Sin IP pública no hay ruta a internet (ni la habrá, aunque el SG lo permita): solo
-    # llega a los VPC endpoints de abajo, que son los únicos destinos realmente alcanzables.
-    description = "Hacia los VPC endpoints (ECR, CloudWatch)"
+    description = "ECR y CloudWatch"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -144,80 +147,10 @@ resource "aws_security_group" "backend" {
   tags = { Name = "${var.name}-backend" }
 }
 
-# ---------------------------------------------------------------------------
-# VPC endpoints: el backend no tiene IP pública, así que no puede salir por el Internet
-# Gateway. Sin esto no podría bajar su imagen de ECR ni mandar logs a CloudWatch.
-# ---------------------------------------------------------------------------
-
-resource "aws_security_group" "vpc_endpoints" {
-  name        = "${var.name}-vpce"
-  description = "Endpoints de interfaz (ECR, CloudWatch Logs) para el backend privado"
-  vpc_id      = data.aws_vpc.default.id
-
-  ingress {
-    description     = "HTTPS desde el backend"
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.backend.id]
-  }
-
-  # Un VPC endpoint de interfaz con DNS privado activado reemplaza la resolución de
-  # "api/dkr.ecr...amazonaws.com" para TODA la VPC (no solo para las subredes del backend):
-  # no se puede limitar por subred. Sin esto, el frontend (que sí sale a internet) también
-  # intenta resolver ECR hacia este endpoint y el SG lo bloquea en silencio (timeout, no rechazo).
-  ingress {
-    description     = "HTTPS desde el frontend (el DNS privado del endpoint aplica a toda la VPC)"
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.frontend.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${var.name}-vpce" }
-}
-
-# Interfaz: están en las 2 subredes de este ambiente, así que no compiten con las del otro.
-resource "aws_vpc_endpoint" "ecr_api" {
-  vpc_id              = data.aws_vpc.default.id
-  service_name        = "com.amazonaws.${data.aws_region.current.name}.ecr.api"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.subnet_ids
-  security_group_ids  = [aws_security_group.vpc_endpoints.id]
-  private_dns_enabled = true
-  tags                = { Name = "${var.name}-ecr-api" }
-}
-
-resource "aws_vpc_endpoint" "ecr_dkr" {
-  vpc_id              = data.aws_vpc.default.id
-  service_name        = "com.amazonaws.${data.aws_region.current.name}.ecr.dkr"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.subnet_ids
-  security_group_ids  = [aws_security_group.vpc_endpoints.id]
-  private_dns_enabled = true
-  tags                = { Name = "${var.name}-ecr-dkr" }
-}
-
-resource "aws_vpc_endpoint" "logs" {
-  vpc_id              = data.aws_vpc.default.id
-  service_name        = "com.amazonaws.${data.aws_region.current.name}.logs"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.subnet_ids
-  security_group_ids  = [aws_security_group.vpc_endpoints.id]
-  private_dns_enabled = true
-  tags                = { Name = "${var.name}-logs" }
-}
-
-# Gateway: se asocia a tablas de rutas (no a subredes). Si staging y producción comparten
-# tabla de rutas, solo uno de los dos la crea (ver variable crear_s3_endpoint_compartido);
-# el otro la reutiliza sin declarar nada (ECR consulta S3 por debajo para las capas de imagen).
+# Gateway: gratis, y evita que el tráfico de S3 (las capas de imagen de ECR viven ahí) salga
+# por el Internet Gateway. Se asocia a tablas de rutas (no a subredes): si staging y producción
+# comparten tabla de rutas, solo uno de los dos la crea (ver variable crear_s3_endpoint_compartido);
+# el otro la reutiliza sin declarar nada.
 resource "aws_vpc_endpoint" "s3" {
   count             = var.crear_s3_endpoint_compartido ? 1 : 0
   vpc_id            = data.aws_vpc.default.id
