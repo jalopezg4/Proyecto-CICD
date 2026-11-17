@@ -1,8 +1,10 @@
 data "aws_region" "current" {}
 
 resource "aws_cloudwatch_log_group" "este" {
-  name              = "/ecs/${var.name}"
-  retention_in_days = 7
+  name = "/ecs/${var.name}"
+  # 7 días (SonarCloud S6413, Checkov CKV_AWS_338): los logs solo se usan para depurar los
+  # despliegues y los ambientes se destruyen después de la demo.
+  retention_in_days = 7 # NOSONAR
 }
 
 resource "aws_ecs_task_definition" "este" {

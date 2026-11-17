@@ -1,4 +1,6 @@
-resource "aws_lb" "este" {
+# Sin access_logs (SonarCloud S6258, Checkov CKV_AWS_91): necesitan un bucket S3 aparte con política
+# para el ELB, y estos ambientes se destruyen después de la demo. Ver .checkov.yaml.
+resource "aws_lb" "este" { # NOSONAR
   name               = "${var.name}-alb"
   internal           = var.internal
   load_balancer_type = "application"
@@ -41,7 +43,9 @@ resource "aws_lb_target_group" "este" {
 resource "aws_lb_listener" "este" {
   load_balancer_arn = aws_lb.este.arn
   port              = coalesce(var.listener_port, var.target_port)
-  protocol          = "HTTP"
+  # Solo HTTP (SonarCloud S5332, Checkov CKV_AWS_2): el Learner Lab no da dominio ni certificado
+  # de ACM para HTTPS. La app no maneja datos sensibles.
+  protocol = "HTTP" # NOSONAR
 
   default_action {
     type             = "forward"
