@@ -1,0 +1,49 @@
+# Checkov (paso 7/8 del plan). Revision del PR #8: se corrigieron los dos baratos
+# (CKV_AWS_131: drop_invalid_header_fields; CKV_AWS_23: description en el egress del SG de los
+# VPC endpoints, que ademas se elimino). El resto no aplica en el Learner Lab, por las
+# restricciones del lab mismas (sin dominio/certificado propio, sin KMS propio, sin WAF, un solo
+# LabRole compartido) o son decisiones de costo/alcance ya tomadas y documentadas en el plan.
+#
+# Nota: sin caracteres acentuados en este archivo. Checkov lo abre con el codec por defecto
+# del sistema en Windows y un tilde rompe el parseo ("charmap codec can't decode byte...").
+
+skip-check:
+  # --- Sin dominio ni certificado propio en el Learner Lab: HTTPS no es viable ---
+  # (el ALB solo puede servir HTTP; ver checklist-qa.md, "No es seguro" es esperado)
+  - CKV_AWS_2    # ALB protocol is HTTPS
+  - CKV_AWS_103  # load balancer is using at least TLS 1.2
+  - CKV_AWS_378  # Load Balancer doesn't use HTTP protocol
+  - CKV2_AWS_20  # ALB redirects HTTP requests into HTTPS ones
+  - CKV_AWS_260  # no SG allow ingress from 0.0.0.0/0 to port 80 (el ALB publico necesita serlo)
+
+  # --- WAF: servicio aparte, fuera del alcance y del presupuesto del curso ---
+  - CKV2_AWS_28  # public facing ALB are protected by WAF
+
+  # --- Access logs y deletion protection: necesitan un bucket S3 propio para los logs del ALB
+  # y no tienen sentido en ambientes que se destruyen despues de la demo (D1) ---
+  - CKV_AWS_91   # ELBv2 access logging enabled
+  - CKV_AWS_150  # Load Balancer deletion protection enabled
+
+  # --- KMS propio: el Learner Lab no permite crear ni administrar llaves KMS (la cuenta es de
+  # estudiante); se usa el cifrado por defecto de cada servicio (AWS managed) ---
+  - CKV_AWS_136  # ECR repositories encrypted using KMS
+  - CKV_AWS_158  # CloudWatch Log Group encrypted by KMS
+  - CKV_AWS_337  # SSM parameters using KMS CMK
+  - CKV2_AWS_34  # SSM Parameter should be Encrypted (ya lo esta, con la llave por defecto)
+
+  # --- Un solo LabRole compartido (restriccion del lab: no se pueden crear roles IAM propios,
+  # ver "Restricciones del AWS Learner Lab" en plan-proyecto-final.md) ---
+  - CKV_AWS_249  # Execution Role ARN and Task Role ARN son distintos en la task definition
+
+  # --- Decisiones de costo/alcance ya tomadas y documentadas ---
+  - CKV_AWS_333  # ECS services sin IP publica automatica: backend y frontend la necesitan para
+                 # salir a ECR/CloudWatch sin VPC endpoints de interfaz (ver infra/README.md,
+                 # revision del PR #8); el ingreso sigue bloqueado por su security group
+  - CKV_AWS_65   # Container Insights en el cluster ECS (costo adicional, ver main.tf)
+  - CKV_AWS_338  # Logs de CloudWatch por al menos 1 anio (el ambiente se destruye tras la demo)
+  - CKV_AWS_382  # SG sin egress amplio (-1): varios servicios necesitan salir a ECR/CloudWatch/
+                 # S3/el ALB interno; restringir puerto por puerto no es proporcional aqui
+
+  # --- Falso positivo de analisis estatico: SI esta asociado (al ALB, al servicio de ECS, etc.)
+  # a traves de otro modulo; Checkov no sigue esa referencia entre modulos ---
+  - CKV2_AWS_5   # Security Groups are attached to another resource
