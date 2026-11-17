@@ -1,0 +1,244 @@
+# CD de Gastico a staging (paso 9 del plan).
+#
+# Se dispara cuando el workflow "CI" termina en verde sobre main (merge de un PR):
+#   publicar   → carga las imágenes que el CI ya probó y las sube a ECR con tag sha-<commit>
+#   desplegar  → terraform apply en el workspace "staging" (ECS espera a quedar estable)
+#   probar     → espera /health con la versión, E2E de Playwright y carga con k6 contra el ALB
+#                Si todo pasa, la versión queda como "last-good" en SSM (base del rollback).
+#
+# Requiere en el repo:
+#   secrets   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN (sesión del Learner Lab;
+#             vencen con cada sesión y hay que actualizarlos)
+#   variable  TF_STATE_BUCKET (bucket del estado de Terraform en esa misma cuenta; ver infra/README.md)
+name: CD staging
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read # para descargar el artefacto "imagenes" del run del CI
+
+# Un solo despliegue a staging a la vez; uno nuevo espera (nunca se corta un apply a la mitad).
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: '1.17.1'
+  # El tag de la imagen es el SHA del commit que el CI probó
+  VERSION: sha-${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Release: subir a ECR la imagen exacta que el CI probó
+  # ---------------------------------------------------------------------------
+  publicar:
+    # Solo si el CI pasó y fue por un push a main (no por un PR)
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - name: Checkout (el commit que probó el CI)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Download tested images
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: imagenes
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # Los repos de ECR los crea el workspace staging. -target los asegura antes del push
+      # (en el primer despliegue todavía no existen); si ya existen, no cambia nada.
+      - name: Ensure ECR repositories (terraform)
+        run: |
+          terraform init -input=false -backend-config=backend.hcl -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          terraform workspace select -or-create staging
+          terraform apply -input=false -auto-approve \
+            -target=module.ecr_backend -target=module.ecr_frontend \
+            -var="backend_image_tag=$VERSION" -var="frontend_image_tag=$VERSION" -var="app_version=$VERSION"
+          echo "BACKEND_REPO=$(terraform output -raw backend_repository_url)" >> "$GITHUB_ENV"
+          echo "FRONTEND_REPO=$(terraform output -raw frontend_repository_url)" >> "$GITHUB_ENV"
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      # Los tags de ECR son inmutables: si esta versión ya se publicó (p. ej. un re-run), no se
+      # vuelve a subir.
+      - name: Push images to ECR
+        run: |
+          gunzip -c "$RUNNER_TEMP/imagenes.tar.gz" | docker load
+          for servicio in backend frontend; do
+            repo_var="$(echo "$servicio" | tr '[:lower:]' '[:upper:]')_REPO"
+            repo="${!repo_var}"
+            if aws ecr describe-images --repository-name "gastico-$servicio" --image-ids imageTag="$VERSION" >/dev/null 2>&1; then
+              echo "gastico-$servicio:$VERSION ya está en ECR"
+            else
+              docker tag "gastico-$servicio:$VERSION" "$repo:$VERSION"
+              docker push "$repo:$VERSION"
+            fi
+          done
+
+  # ---------------------------------------------------------------------------
+  # 2. Despliegue de infraestructura y app en staging
+  # ---------------------------------------------------------------------------
+  desplegar:
+    needs: publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: ${{ steps.salidas.outputs.frontend_url }}
+    outputs:
+      frontend_url: ${{ steps.salidas.outputs.frontend_url }}
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # wait_for_steady_state hace que el apply falle si ECS no logra estabilizar la versión
+      # nueva (circuit breaker con rollback: nivel 1 del rollback).
+      - name: Terraform apply (staging)
+        run: |
+          terraform init -input=false -backend-config=backend.hcl -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          terraform workspace select -or-create staging
+          terraform apply -input=false -auto-approve \
+            -var="backend_image_tag=$VERSION" -var="frontend_image_tag=$VERSION" -var="app_version=$VERSION"
+
+      - name: Outputs and SSM current
+        id: salidas
+        run: |
+          echo "frontend_url=$(terraform output -raw frontend_url)" >> "$GITHUB_OUTPUT"
+          aws ssm put-parameter --name "$(terraform output -raw ssm_current_name)" \
+            --value "$VERSION" --type String --overwrite >/dev/null
+
+  # ---------------------------------------------------------------------------
+  # 3. Pruebas pre-producción contra el ALB de staging
+  # ---------------------------------------------------------------------------
+  probar:
+    needs: desplegar
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE_URL: ${{ needs.desplegar.outputs.frontend_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # ECS reemplaza las tareas de a poco: hasta que /health no responde con la versión
+      # nueva, el ALB todavía puede estar mandando tráfico a la anterior.
+      - name: Wait for the new version
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "$BASE_URL/health" | grep -q "\"version\":\"$VERSION\""; then
+              echo "Staging responde con $VERSION"; exit 0
+            fi
+            echo "Intento $i: todavía no está $VERSION; espero 10 s"; sleep 10
+          done
+          echo "::error::Staging no quedó con la versión $VERSION a tiempo"; exit 1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.13'
+
+      - name: Smoke (8.1 y 8.2)
+        env:
+          SMOKE_BASE_URL: ${{ env.BASE_URL }}
+          SMOKE_VERSION: ${{ env.VERSION }}
+        run: |
+          pip install --require-hashes --only-binary=:all: -r backend/requirements-dev.txt
+          python -m pytest smoke -v
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: E2E (Playwright contra el ALB de staging)
+        env:
+          E2E_BASE_URL: ${{ env.BASE_URL }}
+        run: |
+          npm ci --prefix e2e
+          npx --prefix e2e playwright install --with-deps chromium
+          npm test --prefix e2e
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece # v1.3.0
+
+      - name: Carga (k6, umbrales por endpoint)
+        run: k6 run -e BASE_URL="$BASE_URL" k6/carga.js
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-report-staging
+          path: e2e/playwright-report/
+          if-no-files-found: ignore
+
+      # Solo una versión que pasó todas las pruebas queda como "last-good" (base del rollback, D7)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: SSM last-good
+        run: |
+          aws ssm put-parameter --name /gastico/staging/last-good \
+            --value "$VERSION" --type String --overwrite >/dev/null
+          echo "### Staging quedó en $VERSION ✅" >> "$GITHUB_STEP_SUMMARY"
+          echo "$BASE_URL" >> "$GITHUB_STEP_SUMMARY"
