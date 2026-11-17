@@ -22,7 +22,6 @@ resource "aws_ecs_task_definition" "este" {
       portMappings = [{
         containerPort = var.container_port
         protocol      = "tcp"
-        name          = var.service_connect_alias
       }]
       environment = [for k, v in var.environment_variables : { name = k, value = v }]
       secrets     = [for k, v in var.secrets : { name = k, valueFrom = v }]
@@ -31,7 +30,7 @@ resource "aws_ecs_task_definition" "este" {
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.este.name
           "awslogs-region"        = data.aws_region.current.name
-          "awslogs-stream-prefix" = var.service_connect_alias
+          "awslogs-stream-prefix" = var.name
         }
       }
     }
@@ -51,29 +50,15 @@ resource "aws_ecs_service" "este" {
     assign_public_ip = var.assign_public_ip
   }
 
-  service_connect_configuration {
-    enabled   = true
-    namespace = var.service_connect_namespace_arn
-
-    service {
-      port_name      = var.service_connect_alias
-      discovery_name = var.service_connect_alias
-      client_alias {
-        port = var.container_port
-      }
-    }
+  # El backend va detrás de un ALB interno, y el frontend detrás del público: los dos siempre
+  # tienen target group (ver infra/README.md sobre por qué no es Service Connect/Cloud Map).
+  load_balancer {
+    target_group_arn = var.target_group_arn
+    container_name   = var.name
+    container_port   = var.container_port
   }
 
-  dynamic "load_balancer" {
-    for_each = var.target_group_arn == null ? [] : [1]
-    content {
-      target_group_arn = var.target_group_arn
-      container_name   = var.name
-      container_port   = var.container_port
-    }
-  }
-
-  health_check_grace_period_seconds = var.target_group_arn == null ? null : var.health_check_grace_period
+  health_check_grace_period_seconds = var.health_check_grace_period
 
   # D8 nivel 1: si la tarea nueva no pasa el health check, ECS no le manda trafico y
   # vuelve a la task definition anterior.

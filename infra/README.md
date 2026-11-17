@@ -13,11 +13,19 @@ Ver la sección 3 del plan (`plan-proyecto-final.md`). Resumen de los módulos:
 | `network` | VPC por defecto (no se crea una propia), security groups de mínimo privilegio, y los VPC endpoints que necesita el backend sin IP pública (ECR, CloudWatch, S3) |
 | `ecr` | Repositorios `gastico-backend` / `gastico-frontend`, escaneo al subir, tags inmutables. **Compartidos** entre staging y producción (D5) |
 | `ssm` | `/gastico/<env>/current`, `/gastico/<env>/last-good` (D7) y el secreto de NiceGUI (`storage-secret`, `SecureString`, generado por Terraform) |
-| `alb` | ALB público, sticky sessions, health check en `/health/live` (no `/health`: ver PR #5) |
+| `alb` | Genérico: se instancia dos veces. Público (frontend, sticky sessions, `/health/live`) e interno (backend, D3) |
 | `ecs-service` | Una tarea Fargate genérica; se instancia dos veces (backend y frontend) desde `main.tf` |
 
 Decisiones no obvias:
 
+- **No hay Service Connect ni Cloud Map.** El plan original (D3) decía "backend alcanzable solo
+  por ECS Service Connect", pero **el Learner Lab bloquea todo el servicio `servicediscovery`**
+  (se probó a mano con el CLI tanto el namespace HTTP de Service Connect como el DNS namespace
+  clásico de Cloud Map: los dos dan `AccessDeniedException`). En su lugar, el backend va detrás
+  de un **segundo ALB, interno** (`module.alb_backend`, sin salida a internet): la intención de
+  D3 se mantiene (el backend sigue sin ser alcanzable fuera de la VPC ni directamente desde el
+  frontend sin pasar por el ALB), pero el mecanismo es otro. `GASTICO_API_URL` del frontend
+  apunta al DNS de ese ALB interno, no a un nombre resuelto por Cloud Map.
 - **Recursos compartidos (ECR, VPC endpoint de S3):** staging los crea; producción los reutiliza
   (variable `gestiona_recursos_compartidos` en `main.tf`, basada en `terraform.workspace`). Por
   eso **hay que aplicar `staging` antes que `production`** la primera vez.
@@ -26,7 +34,17 @@ Decisiones no obvias:
   un workspace no choquen con los del otro.
 - **Backend sin IP pública (D3):** no tiene ruta a internet, así que necesita VPC endpoints para
   bajar su imagen de ECR y mandar logs. El frontend sí tiene IP pública (solo para esto: el
-  security group igual le bloquea cualquier tráfico que no venga del ALB).
+  security group igual le bloquea cualquier tráfico que no venga del ALB público).
+- **El SG de los VPC endpoints permite tanto al backend como al frontend.** Un VPC endpoint de
+  interfaz con DNS privado activado (`private_dns_enabled = true`) reemplaza la resolución del
+  nombre público (p. ej. `api.ecr.us-east-1.amazonaws.com`) para **toda la VPC**, no solo para
+  las subredes del backend: no se puede limitar por subred. Si el SG solo deja pasar al backend,
+  el frontend (que también resuelve ese nombre hacia el endpoint) se queda sin poder bajar su
+  propia imagen ni mandar logs, y falla con un timeout silencioso, no con un error claro.
+- **`description` de un `aws_security_group` fuerza reemplazo.** Cambiarlo (aunque sea solo el
+  texto) hace que Terraform destruya y recree el SG completo. Si otro SG lo referencia por ID en
+  una regla (como el de los VPC endpoints), hay que romper esa referencia a mano primero (o con
+  un `apply` previo) o el `destroy` se queda colgado con `DependencyViolation`.
 - **`GASTICO_STORAGE_SECRET` nunca es una variable de Terraform ni de CI:** se genera con
   `random_password`, se guarda en SSM como `SecureString`, y el contenedor lo recibe por
   `secrets` (valueFrom) en la task definition, no por una variable de entorno en texto plano.

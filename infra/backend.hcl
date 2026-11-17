@@ -9,7 +9,7 @@
 # Rellenar <BUCKET> después de crearlo (paso 1 del README) y correr:
 #   terraform init -backend-config=backend.hcl
 
-bucket       = "<BUCKET>"
+bucket       = "gastico-tfstate-471112915289"
 key          = "gastico/terraform.tfstate"
 region       = "us-east-1"
 encrypt      = true

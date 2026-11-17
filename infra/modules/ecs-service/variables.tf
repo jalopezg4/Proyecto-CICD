@@ -58,19 +58,9 @@ variable "secrets" {
   default     = {}
 }
 
-variable "service_connect_namespace_arn" {
-  type = string
-}
-
-variable "service_connect_alias" {
-  description = "Nombre DNS dentro del namespace (\"backend\" o \"frontend\")"
-  type        = string
-}
-
 variable "target_group_arn" {
-  description = "Solo el frontend lo usa; el backend no tiene ALB (D3)"
+  description = "Target group del ALB (público para el frontend, interno para el backend)"
   type        = string
-  default     = null
 }
 
 variable "health_check_grace_period" {

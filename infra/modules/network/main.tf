@@ -87,18 +87,48 @@ resource "aws_security_group" "frontend" {
   tags = { Name = "${var.name}-frontend" }
 }
 
-# D3: backend privado, sin IP pública ni ALB. Solo lo alcanza el frontend, por Service Connect.
-resource "aws_security_group" "backend" {
-  name        = "${var.name}-backend"
-  description = "Backend de ${var.name}: privado, solo trafico del frontend"
+# El Learner Lab bloquea todo el servicio "servicediscovery" (ni namespace HTTP de Service
+# Connect ni el DNS de Cloud Map clásico: se probaron los dos a mano con el CLI y los dos dan
+# AccessDeniedException). Sin eso, el frontend no puede resolver "backend" por nombre, así que
+# en su lugar hay un segundo ALB, interno (sin salida a internet, D3 se mantiene en espíritu:
+# el backend sigue sin ser alcanzable desde fuera de la VPC, nada más que no es Service Connect).
+resource "aws_security_group" "alb_backend" {
+  name        = "${var.name}-alb-backend"
+  description = "ALB interno frente al backend: solo recibe del frontend"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description     = "Desde el frontend (Service Connect)"
+    description     = "Desde el frontend"
     from_port       = 8000
     to_port         = 8000
     protocol        = "tcp"
     security_groups = [aws_security_group.frontend.id]
+  }
+
+  egress {
+    description = "Hacia el backend"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${var.name}-alb-backend" }
+}
+
+# D3: backend privado, sin IP pública. Solo lo alcanza el ALB interno (que a su vez solo
+# recibe del frontend).
+resource "aws_security_group" "backend" {
+  name        = "${var.name}-backend"
+  description = "Backend de ${var.name}: privado, solo trafico del ALB interno"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    description     = "Desde el ALB interno"
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_backend.id]
   }
 
   egress {
@@ -130,6 +160,18 @@ resource "aws_security_group" "vpc_endpoints" {
     to_port         = 443
     protocol        = "tcp"
     security_groups = [aws_security_group.backend.id]
+  }
+
+  # Un VPC endpoint de interfaz con DNS privado activado reemplaza la resolución de
+  # "api/dkr.ecr...amazonaws.com" para TODA la VPC (no solo para las subredes del backend):
+  # no se puede limitar por subred. Sin esto, el frontend (que sí sale a internet) también
+  # intenta resolver ECR hacia este endpoint y el SG lo bloquea en silencio (timeout, no rechazo).
+  ingress {
+    description     = "HTTPS desde el frontend (el DNS privado del endpoint aplica a toda la VPC)"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.frontend.id]
   }
 
   egress {
