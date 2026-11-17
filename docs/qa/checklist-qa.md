@@ -86,7 +86,7 @@ Estas son las evidencias que se muestran en la presentación.
 
 - [ ] ECS: los dos servicios (frontend y backend) están en estado estable, con 1 tarea corriendo cada uno
 - [ ] Target group del ALB: el frontend está "healthy"
-- [ ] El backend **no tiene IP pública** y no responde desde internet
+- [ ] El backend **no responde desde internet**: su security group solo acepta el puerto 8000 desde el ALB interno (tiene IP pública solo para salir a ECR y CloudWatch)
 - [ ] ECR: se revisaron los hallazgos del escaneo de la imagen y no hay críticos sin justificar
 - [ ] SonarCloud: Quality Gate en "Passed"
 - [ ] `/docs` del backend no está expuesto (decisión del plan para producción)
