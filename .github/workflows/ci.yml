@@ -29,9 +29,6 @@ jobs:
   calidad:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # Solo "true"/"false": el token en sí se pasa únicamente al paso de SonarCloud
-      SONAR_CONFIGURADO: ${{ secrets.SONAR_TOKEN != '' }}
 
     steps:
       - name: Checkout
@@ -93,21 +90,17 @@ jobs:
 
       # Un reporte por módulo, con rutas relativas a cada uno (así los resuelve SonarCloud)
       - name: Bandit reports for SonarCloud
-        if: env.SONAR_CONFIGURADO == 'true'
         run: |
           (cd backend && bandit -r app -f json -o bandit-report.json --exit-zero)
           (cd frontend && bandit -r . -x ./tests,./.venv -f json -o bandit-report.json --exit-zero)
 
+      # Obligatorio: si falta el secret SONAR_TOKEN, este paso falla y el CI queda en rojo.
+      # El token solo se pasa a este paso, no a todo el job.
       - name: SonarCloud Scan
-        if: env.SONAR_CONFIGURADO == 'true'
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
-
-      - name: SonarCloud no configurado
-        if: env.SONAR_CONFIGURADO != 'true'
-        run: echo "::warning title=SonarCloud::Falta el secret SONAR_TOKEN; el análisis de SonarCloud se omitió."
 
       - name: Upload reports
         if: always()
