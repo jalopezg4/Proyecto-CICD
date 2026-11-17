@@ -9,3 +9,5 @@ node_modules/
 test-results/
 playwright-report/
 .ruff_cache/
+junit.xml
+bandit-report.json

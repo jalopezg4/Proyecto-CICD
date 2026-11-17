@@ -1,10 +1,11 @@
 [run]
 source = .
 branch = True
+# main.py es la UI de NiceGUI: se cubre con las pruebas E2E de Playwright, no con pruebas unitarias.
+# (No poner comentarios dentro de la lista omit: SonarCloud la lee y se detiene en el comentario.)
 omit =
     tests/*
     main.py
-    api_client.py
 
 [report]
 show_missing = True

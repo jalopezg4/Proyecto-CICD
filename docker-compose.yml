@@ -1,13 +1,15 @@
 # Paso 5 del plan: levanta frontend y backend juntos, en red local.
 # Los nombres de servicio ("backend") son los mismos que usará ECS Service Connect.
+# En CI se usan IMAGE_TAG y APP_VERSION con el SHA del commit; en local quedan "local" y "dev".
 services:
   backend:
     build:
-      context: ./backend
-    image: gastico-backend:local
+      context: .
+      target: backend
+    image: gastico-backend:${IMAGE_TAG:-local}
     environment:
       APP_ENV: development
-      APP_VERSION: dev
+      APP_VERSION: ${APP_VERSION:-dev}
     expose:
       - "8000"
     healthcheck:
@@ -19,13 +21,14 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-    image: gastico-frontend:local
+      context: .
+      target: frontend
+    image: gastico-frontend:${IMAGE_TAG:-local}
     environment:
       GASTICO_API_URL: http://backend:8000
       GASTICO_FRONT_PORT: "8080"
       GASTICO_STORAGE_SECRET: dev-secret-local
-      APP_VERSION: dev
+      APP_VERSION: ${APP_VERSION:-dev}
     ports:
       - "8080:8080"
     depends_on:

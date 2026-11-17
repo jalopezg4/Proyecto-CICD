@@ -1,0 +1,11 @@
+# Contexto de build = raíz del repo. Se ignora todo y solo se deja pasar lo que usan las imágenes.
+*
+!backend/requirements.txt
+!backend/app/
+!frontend/requirements.txt
+!frontend/main.py
+!frontend/api_client.py
+!frontend/formato.py
+!frontend/static/
+**/__pycache__
+**/*.pyc

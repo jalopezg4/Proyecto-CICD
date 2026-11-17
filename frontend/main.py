@@ -21,8 +21,15 @@ from nicegui import app, ui
 API_URL = os.getenv("GASTICO_API_URL", "http://127.0.0.1:8000")
 PUERTO = int(os.getenv("GASTICO_FRONT_PORT", "8080"))
 APP_VERSION = os.getenv("APP_VERSION", "dev")
-# NiceGUI guarda estado por cliente (sesión) y lo necesita para firmarlo
-STORAGE_SECRET = os.getenv("GASTICO_STORAGE_SECRET", "dev-secret-cambiar-en-produccion")
+ES_PRODUCCION = os.getenv("APP_ENV", "development") == "production"
+# NiceGUI guarda estado por cliente (sesión) y lo necesita para firmarlo.
+# En producción es obligatorio: si falta, la app no arranca en vez de usar el valor de desarrollo.
+STORAGE_SECRET = os.getenv("GASTICO_STORAGE_SECRET", "")
+if not STORAGE_SECRET:
+    if ES_PRODUCCION:
+        raise SystemExit("Falta GASTICO_STORAGE_SECRET: es obligatorio con APP_ENV=production")
+    # B105: valor fijo solo para desarrollo; en producción la app no arranca sin la variable
+    STORAGE_SECRET = "dev-secret-solo-local"  # nosec B105
 SEGUNDOS_DESHACER = 6
 
 api = GastosApi(API_URL)

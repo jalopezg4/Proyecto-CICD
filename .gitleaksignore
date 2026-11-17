@@ -1,0 +1,3 @@
+# Falsos positivos de gitleaks revisados a mano (formato: archivo:regla:línea).
+# El projectKey de SonarCloud es un identificador público, no un secreto.
+sonar-project.properties:generic-api-key:3
