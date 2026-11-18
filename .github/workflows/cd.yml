@@ -166,6 +166,9 @@ jobs:
     needs: desplegar
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # write solo para publicar el reporte Allure en la rama gh-pages (GitHub Pages)
+    permissions:
+      contents: write
     env:
       BASE_URL: ${{ needs.desplegar.outputs.frontend_url }}
 
@@ -224,6 +227,7 @@ jobs:
         uses: ./.github/actions/reporte-allure
         with:
           nombre: reporte-e2e-staging
+          version: ${{ env.VERSION }}
 
       - name: Set up k6
         uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece # v1.3.0

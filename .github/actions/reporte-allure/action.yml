@@ -1,13 +1,20 @@
-# Genera el reporte Allure de las E2E (un solo HTML, ver e2e/allurerc.mjs), lo sube como
-# artefacto del run y deja el resultado con el link de descarga en el resumen del run.
-# Lo usan el CI (contra docker compose) y el CD (contra staging).
+# Genera el reporte Allure de las E2E (un solo HTML, ver e2e/allurerc.mjs) y lo publica:
+#   - en GitHub Pages (rama gh-pages), para verlo directo en el navegador con un link por run;
+#   - como artefacto del run, de respaldo.
+# El resumen del run queda con el resultado y los dos links.
+# Lo usan el CI (contra docker compose) y el CD (contra staging). El job necesita contents: write
+# para poder empujar a gh-pages.
 name: Reporte Allure E2E
 description: Genera y publica el reporte Allure de las pruebas E2E
 
 inputs:
   nombre:
-    description: Nombre del artefacto (ej. reporte-e2e-ci)
+    description: Tipo de reporte y nombre del artefacto (ej. reporte-e2e-ci)
     required: true
+  version:
+    description: Versión que se probó (sale en la portada de Pages)
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -17,7 +24,7 @@ runs:
       working-directory: e2e
       run: npx allure generate allure-results --clean --name "Gastico · E2E (${{ inputs.nombre }})"
 
-    - name: Subir reporte
+    - name: Subir reporte (artefacto)
       id: subir
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
       with:
@@ -26,17 +33,65 @@ runs:
         retention-days: 30
         if-no-files-found: error
 
+    # Cada run queda en e2e/<nombre>/<run>-<intento>/ y se guardan los 20 más recientes por tipo.
+    - name: Publicar en GitHub Pages
+      id: pages
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        NOMBRE: ${{ inputs.nombre }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        destino="e2e/${NOMBRE}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        sitio="$RUNNER_TEMP/gh-pages"
+        git clone --quiet --depth 1 --branch gh-pages \
+          "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$sitio"
+        cd "$sitio"
+        mkdir -p "$destino"
+        cp "$GITHUB_WORKSPACE/e2e/allure-report/index.html" "$destino/index.html"
+        python3 - "$GITHUB_WORKSPACE/e2e/allure-report/summary.json" "$destino/summary.json" "$VERSION" <<'EOF'
+        import json, sys
+        datos = json.load(open(sys.argv[1], encoding="utf-8"))
+        datos["meta"] = {**datos.get("meta", {}), "version": sys.argv[3]}
+        json.dump(datos, open(sys.argv[2], "w", encoding="utf-8"))
+        EOF
+        ls -1 "e2e/${NOMBRE}" | sort -V | head -n -20 | while read -r viejo; do
+          git rm -rq "e2e/${NOMBRE}/${viejo}"
+        done
+        python3 "$GITHUB_ACTION_PATH/indice.py"
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add -A
+        git commit -qm "reporte ${NOMBRE} run ${GITHUB_RUN_ID}"
+        # El CI y el CD pueden publicar al mismo tiempo: si el push choca, se rebasa y se reintenta
+        publicado=no
+        for intento in 1 2 3 4 5; do
+          if git push -q origin gh-pages; then publicado=si; break; fi
+          sleep $((intento * 3))
+          git pull -q --rebase origin gh-pages
+        done
+        if [ "$publicado" = no ]; then echo "::error::No se pudo publicar en gh-pages"; exit 1; fi
+        base="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+        echo "url=${base}/${destino}/" >> "$GITHUB_OUTPUT"
+        echo "portada=${base}/" >> "$GITHUB_OUTPUT"
+
     - name: Resumen del run
       shell: bash
       env:
-        URL: ${{ steps.subir.outputs.artifact-url }}
+        ARTEFACTO: ${{ steps.subir.outputs.artifact-url }}
+        URL: ${{ steps.pages.outputs.url }}
+        PORTADA: ${{ steps.pages.outputs.portada }}
       run: |
-        python3 - "$URL" >> "$GITHUB_STEP_SUMMARY" <<'EOF'
-        import json, sys
-        s = json.load(open("e2e/allure-report/summary.json"))["stats"]
-        icono = "✅" if s.get("failed", 0) == 0 and s.get("broken", 0) == 0 else "❌"
-        print(f"### {icono} E2E: {s.get('passed', 0)} pasaron · {s.get('failed', 0)} fallaron · "
-              f"{s.get('broken', 0)} rotos · {s.get('skipped', 0)} no corrieron (total {s.get('total', 0)})")
-        print(f"\n📊 [Descargar el reporte Allure]({sys.argv[1]}): se descomprime y se abre `index.html`. "
-              "Si algo falló, cada escenario trae pantallazo, video y trace.\n")
+        python3 - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+        import json, os
+        s = json.load(open("e2e/allure-report/summary.json", encoding="utf-8"))["stats"]
+        mal = s.get("failed", 0) + s.get("broken", 0)
+        icono = "✅" if mal == 0 else "❌"
+        print(f"### {icono} E2E: {s.get('passed', 0)} pasaron · {mal} fallaron · "
+              f"{s.get('skipped', 0)} no corrieron (total {s.get('total', 0)})")
+        print(f"\n📊 **[Ver el reporte Allure]({os.environ['URL']})** "
+              "(GitHub Pages tarda un minuto en publicarlo). Si algo falló, cada escenario trae "
+              "pantallazo, video y trace.")
+        print(f"\nTodos los reportes: {os.environ['PORTADA']} · "
+              f"[Descargar este reporte]({os.environ['ARTEFACTO']})\n")
         EOF
