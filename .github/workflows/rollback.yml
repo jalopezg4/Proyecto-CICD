@@ -1,0 +1,116 @@
+# Rollback manual, "botón de pánico" (paso 13 del plan, D8 nivel 3).
+#
+# Se dispara a mano desde la pestaña Actions (workflow_dispatch), cuando alguien del equipo
+# detecta un problema. D9: es un deploy más, con el mismo Terraform; no hay un mecanismo aparte.
+# Por defecto vuelve al last-good del ambiente elegido; se puede forzar otra versión (debe
+# existir ya en ECR, con ese tag) con el input "version".
+#
+# Requiere los mismos secrets y la variable TF_STATE_BUCKET que el CD de staging y el release.
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente a revertir
+        required: true
+        type: choice
+        options: [staging, production]
+      version:
+        description: 'Versión a la que volver (vacío = last-good del ambiente)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Un solo despliegue a la vez por ambiente; comparte el grupo con el CD/release de ese ambiente.
+concurrency:
+  group: cd-${{ inputs.ambiente }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: '1.17.1'
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Mismo gate que un despliegue normal: producción pide aprobación de otra persona; staging no.
+    environment:
+      name: ${{ inputs.ambiente }}
+      url: ${{ steps.rollback.outputs.frontend_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Resolver la versión
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(aws ssm get-parameter --name "/gastico/${{ inputs.ambiente }}/last-good" --query Parameter.Value --output text)
+            echo "Sin versión: se usa el last-good ($VERSION)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Volver a la versión elegida (mismo terraform, D9)
+        id: rollback
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: bash .github/scripts/rollback.sh "${{ inputs.ambiente }}" "${{ steps.version.outputs.version }}"
+
+      # Mismo motivo que en el CD/release: ECS reemplaza las tareas de a poco.
+      - name: Esperar la versión
+        env:
+          BASE_URL: ${{ steps.rollback.outputs.frontend_url }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "$BASE_URL/health" | grep -q "\"version\":\"$VERSION\""; then
+              echo "$BASE_URL responde con $VERSION"; exit 0
+            fi
+            echo "Intento $i: todavía no está $VERSION; espero 10 s"; sleep 10
+          done
+          echo "::error::No quedó con la versión $VERSION a tiempo"; exit 1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.13'
+
+      - name: Smoke (solo lectura)
+        env:
+          SMOKE_BASE_URL: ${{ steps.rollback.outputs.frontend_url }}
+          SMOKE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          pip install --require-hashes --only-binary=:all: -r backend/requirements-dev.txt
+          python -m pytest smoke -v
+
+      # Confirmado con el smoke: esta versión queda como la última buena conocida.
+      - name: SSM last-good
+        run: |
+          aws ssm put-parameter --name "/gastico/${{ inputs.ambiente }}/last-good" \
+            --value "${{ steps.version.outputs.version }}" --type String --overwrite >/dev/null
+
+      - name: AWS evidence (resumen del run)
+        if: always()
+        run: |
+          bash .github/scripts/evidencia-aws.sh "${{ inputs.ambiente }}" "${{ steps.version.outputs.version }}" \
+            "${{ steps.rollback.outputs.frontend_url }}" >> "$GITHUB_STEP_SUMMARY"

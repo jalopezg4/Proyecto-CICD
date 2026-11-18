@@ -9,6 +9,10 @@
 #                          terraform apply en el workspace "production"
 #   smoke-produccion     → espera /health con vX.Y.Z y corre el smoke de solo lectura; si pasa,
 #                          vX.Y.Z queda como last-good de producción (base del rollback, paso 13)
+#   rollback-produccion  → paso 13, nivel 2 del rollback (D8): si el smoke falla pero el deploy sí
+#                          quedó estable, vuelve al last-good anterior y repite el smoke. Sin
+#                          aprobación nueva: ya se aprobó este release, y volver a una versión que
+#                          ya pasó todas las pruebas no es un despliegue nuevo que aprobar.
 #
 # Requiere los mismos secrets y la variable TF_STATE_BUCKET que el CD de staging.
 name: Release producción
@@ -228,3 +232,63 @@ jobs:
       - name: AWS evidence (resumen del run)
         if: always()
         run: bash .github/scripts/evidencia-aws.sh production "$TAG" "$BASE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 5. Rollback automático en producción (nivel 2, D8): igual que en staging, pero si el deploy
+  # ya quedó estable y el smoke de producción falla, vuelve al last-good anterior.
+  # ---------------------------------------------------------------------------
+  rollback-produccion:
+    needs: [desplegar-produccion, smoke-produccion]
+    if: ${{ failure() && needs.desplegar-produccion.result == 'success' && needs.smoke-produccion.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Last-good de producción
+        id: last_good
+        run: |
+          VERSION=$(aws ssm get-parameter --name /gastico/production/last-good --query Parameter.Value --output text)
+          echo "Volviendo a $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Volver al last-good (mismo terraform, D9)
+        id: rollback
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: bash .github/scripts/rollback.sh production "${{ steps.last_good.outputs.version }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.13'
+
+      - name: Repetir el smoke contra el last-good
+        env:
+          SMOKE_BASE_URL: ${{ steps.rollback.outputs.frontend_url }}
+          SMOKE_VERSION: ${{ steps.last_good.outputs.version }}
+        run: |
+          pip install --require-hashes --only-binary=:all: -r backend/requirements-dev.txt
+          python -m pytest smoke -v
+
+      - name: AWS evidence (resumen del run)
+        if: always()
+        run: |
+          bash .github/scripts/evidencia-aws.sh production "${{ steps.last_good.outputs.version }}" \
+            "${{ steps.rollback.outputs.frontend_url }}" >> "$GITHUB_STEP_SUMMARY"

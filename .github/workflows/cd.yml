@@ -5,6 +5,9 @@
 #   desplegar  → terraform apply en el workspace "staging" (ECS espera a quedar estable)
 #   probar     → espera /health con la versión, E2E de Playwright y carga con k6 contra el ALB
 #                Si todo pasa, la versión queda como "last-good" en SSM (base del rollback).
+#   rollback   → paso 13, nivel 2 del rollback (D8): si "probar" falla pero el deploy sí quedó
+#                estable, vuelve al last-good y repite el smoke. Automático, sin aprobación: el
+#                run queda en rojo igual, para que alguien revise por qué falló la versión nueva.
 #
 # Requiere en el repo:
 #   secrets   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN (sesión del Learner Lab;
@@ -255,3 +258,64 @@ jobs:
       - name: AWS evidence (resumen del run)
         if: always()
         run: bash .github/scripts/evidencia-aws.sh staging "$VERSION" "$BASE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 4. Rollback automático (nivel 2, D8): el deploy sí quedó estable (si no, ya lo revirtió el
+  # circuit breaker de ECS, nivel 1), pero algo en el smoke/E2E/k6 falló. Se vuelve al last-good
+  # anterior (D9: el rollback es un deploy más, con el mismo Terraform) y se repite el smoke.
+  # ---------------------------------------------------------------------------
+  rollback:
+    needs: [desplegar, probar]
+    if: ${{ failure() && needs.desplegar.result == 'success' && needs.probar.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Last-good de staging
+        id: last_good
+        run: |
+          VERSION=$(aws ssm get-parameter --name /gastico/staging/last-good --query Parameter.Value --output text)
+          echo "Volviendo a $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Volver al last-good (mismo terraform, D9)
+        id: rollback
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: bash .github/scripts/rollback.sh staging "${{ steps.last_good.outputs.version }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.13'
+
+      - name: Repetir el smoke contra el last-good
+        env:
+          SMOKE_BASE_URL: ${{ steps.rollback.outputs.frontend_url }}
+          SMOKE_VERSION: ${{ steps.last_good.outputs.version }}
+        run: |
+          pip install --require-hashes --only-binary=:all: -r backend/requirements-dev.txt
+          python -m pytest smoke -v
+
+      - name: AWS evidence (resumen del run)
+        if: always()
+        run: |
+          bash .github/scripts/evidencia-aws.sh staging "${{ steps.last_good.outputs.version }}" \
+            "${{ steps.rollback.outputs.frontend_url }}" >> "$GITHUB_STEP_SUMMARY"
