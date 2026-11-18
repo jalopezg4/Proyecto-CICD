@@ -2,7 +2,7 @@
 # Corre en cada PR hacia main, en cada push a main y manualmente.
 #
 #   calidad   → pre-commit, seguridad (Bandit, pip-audit, Checkov), pruebas con cobertura y SonarCloud
-#   imagenes  → build de las 2 imágenes, Trivy, y E2E + smoke contra docker compose
+#   imagenes  → build de las 2 imágenes, Trivy, y E2E contra docker compose
 #   ci        → resume los dos anteriores. Es el check obligatorio del ruleset proteger-main:
 #               no cambiar su nombre.
 name: CI
@@ -174,11 +174,6 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: '3.13'
-
       - name: E2E (Playwright contra los contenedores)
         env:
           E2E_BASE_URL: http://localhost:8080
@@ -187,17 +182,10 @@ jobs:
           npx --prefix e2e playwright install --with-deps chromium
           npm test --prefix e2e
 
-      - name: Smoke (solo lectura)
-        env:
-          SMOKE_BASE_URL: http://localhost:8080
-          SMOKE_VERSION: ${{ env.APP_VERSION }}
-        run: |
-          pip install --require-hashes --only-binary=:all: -r backend/requirements-dev.txt
-          python -m pytest smoke -v
-
       # --- Release: el artefacto que el CD despliega es exactamente esta imagen ya probada ---
       # Solo en main. Se guarda como artefacto del run (no se vuelve a construir en el CD), así
-      # lo que llega a staging y a producción es, por digest, lo que pasó Trivy, E2E y smoke.
+      # lo que llega a staging y a producción es, por digest, lo que pasó Trivy y las E2E.
+      # (El smoke no corre aquí: su lugar es después de cada despliegue, en el CD y el release.)
       - name: Save tested images (release)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: docker save "gastico-backend:${IMAGE_TAG}" "gastico-frontend:${IMAGE_TAG}" | gzip > imagenes.tar.gz
