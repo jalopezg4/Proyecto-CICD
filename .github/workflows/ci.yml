@@ -2,7 +2,7 @@
 # Corre en cada PR hacia main, en cada push a main y manualmente.
 #
 #   calidad   → pre-commit, seguridad (Bandit, pip-audit, Checkov), pruebas con cobertura y SonarCloud
-#   imagenes  → build de las 2 imágenes, Trivy, y E2E + smoke contra docker compose
+#   imagenes  → build de las 2 imágenes, Trivy, y E2E contra docker compose
 #   ci        → resume los dos anteriores. Es el check obligatorio del ruleset proteger-main:
 #               no cambiar su nombre.
 name: CI
@@ -131,6 +131,9 @@ jobs:
   imagenes:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # write solo para publicar el reporte Allure en la rama gh-pages (GitHub Pages)
+    permissions:
+      contents: write
     env:
       IMAGE_TAG: sha-${{ github.sha }}
       APP_VERSION: sha-${{ github.sha }}
@@ -174,30 +177,28 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: '3.13'
-
       - name: E2E (Playwright contra los contenedores)
+        id: e2e
         env:
           E2E_BASE_URL: http://localhost:8080
+          E2E_AMBIENTE: ci (docker compose)
+          E2E_VERSION: ${{ env.APP_VERSION }}
         run: |
           npm ci --prefix e2e
           npx --prefix e2e playwright install --with-deps chromium
           npm test --prefix e2e
 
-      - name: Smoke (solo lectura)
-        env:
-          SMOKE_BASE_URL: http://localhost:8080
-          SMOKE_VERSION: ${{ env.APP_VERSION }}
-        run: |
-          pip install --require-hashes --only-binary=:all: -r backend/requirements-dev.txt
-          python -m pytest smoke -v
+      # Reporte Allure, pase o falle (si falla, con pantallazo, video y trace de cada escenario)
+      - name: Reporte Allure (E2E)
+        if: ${{ !cancelled() && steps.e2e.outcome != 'skipped' }}
+        uses: ./.github/actions/reporte-allure
+        with:
+          nombre: reporte-e2e-ci
 
       # --- Release: el artefacto que el CD despliega es exactamente esta imagen ya probada ---
       # Solo en main. Se guarda como artefacto del run (no se vuelve a construir en el CD), así
-      # lo que llega a staging y a producción es, por digest, lo que pasó Trivy, E2E y smoke.
+      # lo que llega a staging y a producción es, por digest, lo que pasó Trivy y las E2E.
+      # (El smoke no corre aquí: su lugar es después de cada despliegue, en el CD y el release.)
       - name: Save tested images (release)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: docker save "gastico-backend:${IMAGE_TAG}" "gastico-frontend:${IMAGE_TAG}" | gzip > imagenes.tar.gz
@@ -214,14 +215,6 @@ jobs:
       - name: Container logs on failure
         if: failure()
         run: docker compose logs
-
-      - name: Upload Playwright report
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: playwright-report
-          path: e2e/playwright-report/
-          if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
   # Check obligatorio: pasa solo si calidad e imagenes pasaron

@@ -18,3 +18,5 @@ bandit-report.json
 *.tfstate
 *.tfstate.*
 *.tfplan
+allure-results/
+allure-report/
