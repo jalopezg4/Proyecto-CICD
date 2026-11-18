@@ -194,7 +194,6 @@ jobs:
         uses: ./.github/actions/reporte-allure
         with:
           nombre: reporte-e2e-ci
-          version: ${{ env.APP_VERSION }}
 
       # --- Release: el artefacto que el CD despliega es exactamente esta imagen ya probada ---
       # Solo en main. Se guarda como artefacto del run (no se vuelve a construir en el CD), así

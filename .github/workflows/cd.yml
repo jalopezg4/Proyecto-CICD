@@ -227,7 +227,6 @@ jobs:
         uses: ./.github/actions/reporte-allure
         with:
           nombre: reporte-e2e-staging
-          version: ${{ env.VERSION }}
 
       - name: Set up k6
         uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece # v1.3.0
