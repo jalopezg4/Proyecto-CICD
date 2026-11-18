@@ -19,12 +19,30 @@ export default defineConfig({
   testDir: "./specs",
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
-  reporter: [["list"], ["html", { open: "never" }]],
+  // allure-results: insumo del reporte Allure (allurerc.mjs). Cada test.step de los steps BDD
+  // sale como un paso del reporte, y los adjuntos de abajo quedan pegados al escenario.
+  reporter: [
+    ["list"],
+    ["html", { open: "never" }],
+    [
+      "allure-playwright",
+      {
+        resultsDir: "allure-results",
+        environmentInfo: {
+          ambiente: process.env.E2E_AMBIENTE ?? (URL_EXTERNA ? "externo" : "local"),
+          url: URL_EXTERNA ?? `http://127.0.0.1:${PUERTO_FRONTEND}`,
+          version: process.env.E2E_VERSION ?? "dev",
+        },
+      },
+    ],
+  ],
 
+  // Evidencia solo cuando algo falla: pantallazo, video y trace (se abre en trace.playwright.dev)
   use: {
     baseURL: URL_EXTERNA ?? `http://127.0.0.1:${PUERTO_FRONTEND}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    video: "retain-on-failure",
   },
 
   projects: [

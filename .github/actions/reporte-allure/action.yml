@@ -1,0 +1,42 @@
+# Genera el reporte Allure de las E2E (un solo HTML, ver e2e/allurerc.mjs), lo sube como
+# artefacto del run y deja el resultado con el link de descarga en el resumen del run.
+# Lo usan el CI (contra docker compose) y el CD (contra staging).
+name: Reporte Allure E2E
+description: Genera y publica el reporte Allure de las pruebas E2E
+
+inputs:
+  nombre:
+    description: Nombre del artefacto (ej. reporte-e2e-ci)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Generar reporte
+      shell: bash
+      working-directory: e2e
+      run: npx allure generate allure-results --clean --name "Gastico · E2E (${{ inputs.nombre }})"
+
+    - name: Subir reporte
+      id: subir
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      with:
+        name: ${{ inputs.nombre }}
+        path: e2e/allure-report/index.html
+        retention-days: 30
+        if-no-files-found: error
+
+    - name: Resumen del run
+      shell: bash
+      env:
+        URL: ${{ steps.subir.outputs.artifact-url }}
+      run: |
+        python3 - "$URL" >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+        import json, sys
+        s = json.load(open("e2e/allure-report/summary.json"))["stats"]
+        icono = "✅" if s.get("failed", 0) == 0 and s.get("broken", 0) == 0 else "❌"
+        print(f"### {icono} E2E: {s.get('passed', 0)} pasaron · {s.get('failed', 0)} fallaron · "
+              f"{s.get('broken', 0)} rotos · {s.get('skipped', 0)} no corrieron (total {s.get('total', 0)})")
+        print(f"\n📊 [Descargar el reporte Allure]({sys.argv[1]}): se descomprime y se abre `index.html`. "
+              "Si algo falló, cada escenario trae pantallazo, video y trace.\n")
+        EOF
