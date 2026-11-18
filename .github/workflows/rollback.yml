@@ -17,7 +17,7 @@ on:
         type: choice
         options: [staging, production]
       version:
-        description: 'Versión a la que volver (vacío = last-good del ambiente)'
+        description: 'Versión a la que volver (vacío = last-good del ambiente; en production debe ser vX.Y.Z)'
         required: false
         type: string
 
@@ -60,21 +60,45 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
+      # El input "version" es texto libre: va siempre por variable de entorno, nunca interpolado
+      # directo en el script (si no, alguien podría meter algo como "; rm -rf" en el input y el
+      # shell lo ejecutaría). "ambiente" es un "choice" (valores fijos), pero igual va por env
+      # por consistencia.
       - name: Resolver la versión
         id: version
+        env:
+          AMBIENTE: ${{ inputs.ambiente }}
+          VERSION_PEDIDA: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
+          VERSION="$VERSION_PEDIDA"
           if [ -z "$VERSION" ]; then
-            VERSION=$(aws ssm get-parameter --name "/gastico/${{ inputs.ambiente }}/last-good" --query Parameter.Value --output text)
+            VERSION=$(aws ssm get-parameter --name "/gastico/$AMBIENTE/last-good" --query Parameter.Value --output text)
             echo "Sin versión: se usa el last-good ($VERSION)"
           fi
+          if [ "$AMBIENTE" = production ] && ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::En production la versión debe ser vX.Y.Z (se pidió '$VERSION')"; exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Que exista el tag en ECR antes de aplicar: si no, el apply falla mucho más adelante
+      # (ECS no puede bajar la imagen) y deja menos claro qué pasó.
+      - name: Confirmar que la imagen existe en ECR
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for repo in gastico-backend gastico-frontend; do
+            if ! aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$VERSION" >/dev/null 2>&1; then
+              echo "::error::$repo:$VERSION no existe en ECR"; exit 1
+            fi
+          done
 
       - name: Volver a la versión elegida (mismo terraform, D9)
         id: rollback
         env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-        run: bash .github/scripts/rollback.sh "${{ inputs.ambiente }}" "${{ steps.version.outputs.version }}"
+          AMBIENTE: ${{ inputs.ambiente }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash .github/scripts/rollback.sh "$AMBIENTE" "$VERSION"
 
       # Mismo motivo que en el CD/release: ECS reemplaza las tareas de a poco.
       - name: Esperar la versión
@@ -105,12 +129,17 @@ jobs:
 
       # Confirmado con el smoke: esta versión queda como la última buena conocida.
       - name: SSM last-good
+        env:
+          AMBIENTE: ${{ inputs.ambiente }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          aws ssm put-parameter --name "/gastico/${{ inputs.ambiente }}/last-good" \
-            --value "${{ steps.version.outputs.version }}" --type String --overwrite >/dev/null
+          aws ssm put-parameter --name "/gastico/$AMBIENTE/last-good" \
+            --value "$VERSION" --type String --overwrite >/dev/null
 
       - name: AWS evidence (resumen del run)
         if: always()
-        run: |
-          bash .github/scripts/evidencia-aws.sh "${{ inputs.ambiente }}" "${{ steps.version.outputs.version }}" \
-            "${{ steps.rollback.outputs.frontend_url }}" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          AMBIENTE: ${{ inputs.ambiente }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BASE_URL: ${{ steps.rollback.outputs.frontend_url }}
+        run: bash .github/scripts/evidencia-aws.sh "$AMBIENTE" "$VERSION" "$BASE_URL" >> "$GITHUB_STEP_SUMMARY"

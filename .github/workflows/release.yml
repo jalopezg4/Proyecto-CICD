@@ -274,6 +274,19 @@ jobs:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
         run: bash .github/scripts/rollback.sh production "${{ steps.last_good.outputs.version }}"
 
+      - name: Esperar la versión
+        env:
+          BASE_URL: ${{ steps.rollback.outputs.frontend_url }}
+          VERSION: ${{ steps.last_good.outputs.version }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "$BASE_URL/health" | grep -q "\"version\":\"$VERSION\""; then
+              echo "$BASE_URL responde con $VERSION"; exit 0
+            fi
+            echo "Intento $i: todavía no está $VERSION; espero 10 s"; sleep 10
+          done
+          echo "::error::No quedó con la versión $VERSION a tiempo"; exit 1
+
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
