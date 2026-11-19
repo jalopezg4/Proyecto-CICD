@@ -15,6 +15,7 @@ Ver la sección 3 del plan (`plan-proyecto-final.md`). Resumen de los módulos:
 | `ssm` | `/gastico/<env>/current`, `/gastico/<env>/last-good` (D7) y el secreto de NiceGUI (`storage-secret`, `SecureString`, generado por Terraform) |
 | `alb` | Genérico: se instancia dos veces. Público (frontend, sticky sessions, `/health/live`) e interno (backend, D3) |
 | `ecs-service` | Una tarea Fargate genérica; se instancia dos veces (backend y frontend) desde `main.tf` |
+| `monitoring` | Dashboard de CloudWatch del ambiente (peticiones, errores, latencia, tareas sanas, CPU/memoria, alarmas y errores recientes en los logs) y 6 alarmas: 5xx, latencia p95 > 1.5 s, frontend/backend sin tareas sanas, CPU > 80 %. Sin acciones (no hay SNS): se ven en la consola y en el resumen de cada run del CD |
 
 Decisiones no obvias:
 

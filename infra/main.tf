@@ -129,3 +129,19 @@ module "frontend" {
 
   depends_on = [module.backend]
 }
+
+# Dashboard y alarmas de CloudWatch del ambiente (ver modules/monitoring)
+module "monitoring" {
+  source                           = "./modules/monitoring"
+  name                             = local.name
+  environment                      = local.environment
+  region                           = var.aws_region
+  cluster_name                     = aws_ecs_cluster.este.name
+  alb_arn_suffix                   = module.alb.arn_suffix
+  frontend_target_group_arn_suffix = module.alb.target_group_arn_suffix
+  backend_alb_arn_suffix           = module.alb_backend.arn_suffix
+  backend_target_group_arn_suffix  = module.alb_backend.target_group_arn_suffix
+  frontend_service_name            = module.frontend.service_name
+  backend_service_name             = module.backend.service_name
+  log_group_names                  = [module.frontend.log_group_name, module.backend.log_group_name]
+}

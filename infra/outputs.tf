@@ -22,3 +22,8 @@ output "ssm_current_name" {
 output "ssm_last_good_name" {
   value = module.ssm.last_good_name
 }
+
+output "dashboard_url" {
+  description = "Dashboard de CloudWatch del ambiente (consola de AWS)"
+  value       = module.monitoring.dashboard_url
+}

@@ -74,6 +74,23 @@ echo
 echo "_ECR también reporta vulnerabilidades sin arreglo disponible; Trivy en el CI solo falla con las que tienen arreglo._"
 echo
 
+echo "### Monitoreo (alarmas de CloudWatch)"
+echo "Dashboard: [${NOMBRE}](https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards/dashboard/${NOMBRE}) (se abre con la sesión del Learner Lab)"
+echo
+echo "| Alarma | Estado |"
+echo "|---|---|"
+aws cloudwatch describe-alarms --alarm-name-prefix "${NOMBRE}-" \
+  --query 'MetricAlarms[].[AlarmName,StateValue]' --output text | tr -d '\r' |
+  while read -r alarma estado; do
+    case "${estado}" in
+      OK) icono="✅" ;;
+      ALARM) icono="🔴" ;;
+      *) icono="⏳" ;; # INSUFFICIENT_DATA: recién creada o sin tráfico todavía
+    esac
+    echo "| ${alarma} | ${icono} ${estado} |"
+  done
+echo
+
 echo "### SSM (base del rollback)"
 echo "| Parámetro | Valor |"
 echo "|---|---|"
