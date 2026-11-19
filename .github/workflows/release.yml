@@ -15,7 +15,7 @@
 #                          ya pasó todas las pruebas no es un despliegue nuevo que aprobar.
 #
 # Requiere los mismos secrets y la variable TF_STATE_BUCKET que el CD de staging.
-name: Release producción
+name: 3 · Release producción
 
 on:
   push:
