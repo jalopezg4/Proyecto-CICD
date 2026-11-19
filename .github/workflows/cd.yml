@@ -13,11 +13,11 @@
 #   secrets   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN (sesión del Learner Lab;
 #             vencen con cada sesión y hay que actualizarlos)
 #   variable  TF_STATE_BUCKET (bucket del estado de Terraform en esa misma cuenta; ver infra/README.md)
-name: CD staging
+name: 2 · CD staging
 
 on:
   workflow_run:
-    workflows: [CI]
+    workflows: ['1 · CI'] # nombre exacto del workflow de ci.yml: si se cambia allá, cambiarlo aquí
     types: [completed]
     branches: [main]
 

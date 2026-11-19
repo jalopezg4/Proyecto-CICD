@@ -5,7 +5,7 @@
 #   imagenes  → build de las 2 imágenes, Trivy, y E2E contra docker compose
 #   ci        → resume los dos anteriores. Es el check obligatorio del ruleset proteger-main:
 #               no cambiar su nombre.
-name: CI
+name: 1 · CI
 
 on:
   pull_request:
