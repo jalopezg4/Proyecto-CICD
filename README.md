@@ -23,7 +23,7 @@ flowchart LR
     ALBI --> BE[Backend FastAPI :8000<br/>1 tarea · datos en memoria]
   end
   ECR[(ECR<br/>tags inmutables · scan on push)] -.imagen.-> FE & BE
-  SSM[(SSM<br/>current · last-good)] -.versión.-> FE
+  SSM[(SSM<br/>storage-secret · current · last-good)] -.storage-secret.-> FE
   CW[CloudWatch<br/>logs · dashboard · 6 alarmas] -.-> FE & BE
 ```
 
@@ -32,6 +32,8 @@ flowchart LR
 - El plan pedía Service Connect, pero el Learner Lab bloquea `servicediscovery`; por eso el ALB
   interno. Detalle y demás decisiones de Terraform: [infra/README.md](infra/README.md).
 - Staging y producción son dos workspaces del mismo Terraform, con su estado en S3.
+- Del SSM, el frontend solo lee el `storage-secret` de NiceGUI. `current` y `last-good` los usa
+  el pipeline: el deploy, el release y el rollback.
 
 ## Pipeline
 
@@ -50,11 +52,14 @@ flowchart LR
 | Tag `vX.Y.Z` | Verifica que el commit sea el `last-good` de staging, le pone el tag al **mismo digest** en ECR, pide aprobación, despliega y corre el smoke | production |
 | Botón de pánico | `rollback.yml` a mano: vuelve al `last-good` (u otra versión) y repite el smoke | el que se elija |
 
-Ramas, commits y versiones: [CONTRIBUTING.md](CONTRIBUTING.md). Para sacar un release:
+Ramas, commits y versiones: [CONTRIBUTING.md](CONTRIBUTING.md). Para sacar un release, el tag
+va sobre el commit que es el `last-good` de staging; si no, el job `verificar` lo rechaza:
 
 ```bash
-git tag v1.2.0 && git push origin v1.2.0
+git tag v1.2.0 <commit last-good de staging> && git push origin v1.2.0
 ```
+
+También se puede crear desde GitHub: Releases → Draft a new release, con el tag sobre ese commit.
 
 ## Rollback en 3 niveles
 
@@ -73,6 +78,8 @@ pruebas; nada se cambia a mano en la consola.
 2. **Backend privado:** dos servicios de ECS y el backend sin acceso desde internet.
 3. **Release por tags y rollback:** el mismo digest pasa de staging a producción, con `current`
    y `last-good` en SSM.
+4. **Observabilidad:** monitoreo con CloudWatch (un dashboard y 6 alarmas por ambiente) y
+   reportes Allure de las E2E publicados en GitHub Pages.
 
 ## Estrategia de pruebas
 
@@ -87,14 +94,17 @@ pruebas; nada se cambia a mano en la consola.
 | Smoke | pytest | staging y producción | Versión correcta y app viva, sin escribir datos |
 | Manual | [checklist de QA](docs/qa/checklist-qa.md) | staging y producción | [Escenarios BDD](docs/qa/escenarios-bdd.md) que no se automatizan |
 
-El reporte Allure de las E2E de cada run queda en https://jalopezg4.github.io/Proyecto-CICD/.
+El reporte Allure de las E2E sale en el resumen de cada run del CI y del CD (link **Allure
+report**), publicado en GitHub Pages. Ejemplo:
+https://jalopezg4.github.io/Proyecto-CICD/e2e/reporte-e2e-ci/44228872687-1/
 
 ## Monitoreo
 
 Cada ambiente tiene un dashboard de CloudWatch (`gastico-<env>`) con peticiones, errores,
 latencia, tareas sanas y CPU/memoria, y 6 alarmas: 5xx, latencia p95, frontend o backend sin
 tareas sanas y CPU alta. El estado de las alarmas sale en el resumen de cada run, así que se ve
-sin credenciales de AWS.
+sin credenciales de AWS. La prueba de las alarmas en staging está en
+[docs/evidencias/](docs/evidencias/README.md#monitoreo).
 
 ## Limitaciones conocidas
 
