@@ -90,8 +90,8 @@ backend. Se dispararon 3 alarmas de verdad y todas volvieron solas a OK:
 | 12:05 | `backend-sin-tareas-sanas` | ALARM |
 | 12:09 | `backend-sin-tareas-sanas` | OK |
 
-- **Pantallazos del dashboard: pendientes.** Jennifer los toma con la sesión del Learner Lab (rango
-  de 1 h o 3 h del 19 de noviembre) y los sube a `docs/evidencias/monitoreo/`.
+- **Pantallazos del dashboard y de las 3 alarmas:** [monitoreo/README.md](monitoreo/README.md),
+  con el detalle de la prueba y cómo repetirla.
 
 ## Antes de entregar
 
